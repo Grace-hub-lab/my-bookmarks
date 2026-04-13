@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📚 书签管理器 - GitHub Pages</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans SC', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .auth-section {
+            background: rgba(255,255,255,0.95);
+            border-radius: 12px;
+            padding: 15px 25px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .auth-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+        }
+
+        .auth-status.readonly { color: #f44336; }
+        .auth-status.admin { color: #4caf50; }
+
+        .auth-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .btn-login { background: #667eea; color: white; }
+        .btn-login:hover { background: #5568d3; }
+        .btn-logout { background: #f44336; color: white; }
+        .btn-logout:hover { background: #da190b; }
+        .btn-sync { background: #ff9800; color: white; }
+        .btn-sync:hover { background: #f57c00; }
+
+        .stats {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 1.1em;
+            font-weight: 500;
+        }
+
+        .search-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .search-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .search-bar input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .search-bar input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .search-bar button {
+            padding: 15px 30px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .search-bar button:hover {
+            background: #5568d3;
+        }
+
+        .category-tabs {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .category-tab {
+            padding: 10px 25px;
+            background: #f5f5f5;
+            border: 2px solid transparent;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .category-tab:hover {
+            background: #e8e8e8;
+        }
+
+        .category-tab.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .add-button {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 30px;
+            cursor: pointer;
+            box-shadow: 0 5px 20px rgba(255,107,107,0.4);
+            transition: all 0.3s;
+            z-index: 1000;
+            display: none;
+        }
+
+        .add-button.show {
+            display: block;
+        }
+
+        .add-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 8px 25px rgba(255,107,107,0.6);
+        }
+
+        .results-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .resource-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .resource-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+
+        .resource-card .category-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .resource-card .category-badge.tool {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .resource-card .category-badge.wiki {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .resource-card .category-badge.quip {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .resource-card h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+        }
+
+        .resource-card .url {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.9em;
+            word-break: break-all;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        .resource-card .url:hover {
+            text-decoration: underline;
+        }
+
+        .resource-card .description {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .resource-card .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .resource-card .actions.hidden {
+            display: none;
+        }
+
+        .resource-card .actions button {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .edit-btn {
+            background: #4caf50;
+            color: white;
+        }
+
+        .edit-btn:hover {
+            background: #45a049;
+        }
+
+        .delete-btn {
+            background: #f44336;
+            color: white;
+        }
+
+        .delete-btn:hover {
+            background: #da190b;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-content h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-group input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 25px;
+        }
+
+        .modal-actions button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .save-btn {
+            background: #667eea;
+            color: white;
+        }
+
+        .save-btn:hover {
+            background: #5568d3;
+        }
+
+        .cancel-btn {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .cancel-btn:hover {
+            background: #d0d0d0;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            z-index: 3000;
+            display: none;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .notification.show {
+            display: block;
+        }
+
+        .notification.success {
+            border-left: 4px solid #4caf50;
+        }
+
+        .notification.error {
+            border-left: 4px solid #f44336;
+        }
+
+        .notification.info {
+            border-left: 4px solid #2196f3;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        @media (max-width: 768px) {
+            .results-section {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .search-bar {
+                flex-direction: column;
+            }
+
+            .category-tabs {
+                justify-content: center;
+            }
+
+            .auth-section {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📚 书签管理器</h1>
+            <p>GitHub Pages + JSON 数据管理</p>
+        </div>
+
+        <div class="auth-section">
+            <div class="auth-status readonly" id="authStatus">
+                🔒 只读模式
+            </div>
+            <div class="auth-buttons" id="authButtons">
+                <button class="btn btn-login" onclick="showLoginModal()">🔑 管理员登录</button>
+                <button class="btn btn-sync" onclick="syncToJSON()">💾 同步到JSON</button>
+            </div>
+        </div>
+
+        <div class="stats" id="stats">
+            正在加载资源...
+        </div>
+
+        <div class="search-section">
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="搜索标题、描述或URL...">
+                <button onclick="searchResources()">🔍 搜索</button>
+            </div>
+
+            <div class="category-tabs">
+                <div class="category-tab active" data-category="all" onclick="filterByCategory('all')">
+                    全部资源
+                </div>
+                <div class="category-tab" data-category="tool" onclick="filterByCategory('tool')">
+                    🔧 工具
+                </div>
+                <div class="category-tab" data-category="wiki" onclick="filterByCategory('wiki')">
+                    📖 Wiki
+                </div>
+                <div class="category-tab" data-category="quip" onclick="filterByCategory('quip')">
+                    💡 Quip
+                </div>
+            </div>
+        </div>
+
+        <div class="results-section" id="resultsSection">
+            <div class="loading">正在加载资源数据...</div>
+        </div>
+
+        <div class="no-results" id="noResults" style="display: none;">
+            未找到匹配的资源，请尝试其他搜索条件！
+        </div>
+    </div>
+
+    <button class="add-button" id="addButton" onclick="openModal()" title="添加新资源">+</button>
+
+    <!-- 登录模态框 -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <h2>🔑 管理员登录</h2>
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="password">密码 *</label>
+                    <input type="password" id="password" required placeholder="请输入管理员密码">
+                </div>
+
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="rememberMe">
+                        <label for="rememberMe">记住登录状态 (7天)</label>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="submit" class="save-btn">🔓 登录</button>
+                    <button type="button" class="cancel-btn" onclick="closeLoginModal()">❌ 取消</button>
+                </div>
+            </form>
+            <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
+                💡 默认密码: <strong>admin123</strong>
+            </p>
+        </div>
+    </div>
+
+    <!-- 资源编辑模态框 -->
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle">添加新资源</h2>
+            <form id="resourceForm" onsubmit="saveResource(event)">
+                <div class="form-group">
+                    <label for="title">标题 *</label>
+                    <input type="text" id="title" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="url">URL *</label>
+                    <input type="url" id="url" required placeholder="https://example.com">
+                </div>
+
+                <div class="form-group">
+                    <label for="category">分类 *</label>
+                    <select id="category" required>
+                        <option value="">选择分类</option>
+                        <option value="tool">🔧 工具</option>
+                        <option value="wiki">📖 Wiki</option>
+                        <option value="quip">💡 Quip</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="description">描述</label>
+                    <textarea id="description" placeholder="简要描述该资源..."></textarea>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="submit" class="save-btn">💾 保存</button>
+                    <button type="button" class="cancel-btn" onclick="closeModal()">❌ 取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 通知提示 -->
+    <div class="notification" id="notification"></div>
+
+    <script>
+        // 配置常量
+        const PASSWORD_HASH = '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9'; // admin123
+        const STORAGE_KEY = 'bookmarkResources';
+        const AUTH_KEY = 'bookmarkAuth';
+        const DATA_VERSION = '3.0';
+        const VERSION_KEY = 'bookmarkDataVersion';
+
+        // 默认资源数据（作为备用）
+        const DEFAULT_RESOURCES = [];
+
+        // 全局状态
+        let resources = [];
+        let currentFilter = 'all';
+        let editingId = null;
+        let isAdmin = false;
+
+        // SHA-256 哈希函数
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // 从外部data.json加载资源
+        async function loadResourcesFromJSON() {
+            try {
+                const response = await fetch('data.json');
+                if (!response.ok) {
+                    throw new Error('无法加载 data.json');
+                }
+                const data = await response.json();
+                console.log('✅ 成功从 data.json 加载', data.length, '条资源');
+                return data;
+            } catch (error) {
+                console.warn('⚠️ 加载 data.json 失败:', error.message);
+                return null;
+            }
+        }
+
+        // 初始化资源数据
+        async function initResources() {
+            const storedVersion = localStorage.getItem(VERSION_KEY);
+            const stored = localStorage.getItem(STORAGE_KEY);
+
+            // 尝试从外部JSON加载
+            const jsonData = await loadResourcesFromJSON();
+
+            if (jsonData && jsonData.length > 0) {
+                // 如果成功加载JSON且版本不同，使用JSON数据
+                if (storedVersion !== DATA_VERSION) {
+                    resources = jsonData;
+                    saveResources();
+                    localStorage.setItem(VERSION_KEY, DATA_VERSION);
+                    showNotification('✅ 已从 data.json 加载 ' + jsonData.length + ' 条资源', 'success');
+                } else if (stored) {
+                    // 版本相同，使用localStorage
+                    try {
+                        resources = JSON.parse(stored);
+                        console.log('✅ 从 localStorage 加载', resources.length, '条资源');
+                    } catch (e) {
+                        resources = jsonData;
+                        saveResources();
+                    }
+                } else {
+                    resources = jsonData;
+                    saveResources();
+                }
+            } else if (stored) {
+                // JSON加载失败，使用localStorage
+                try {
+                    resources = JSON.parse(stored);
+                    console.log('✅ 从 localStorage 加载', resources.length, '条资源');
+                } catch (e) {
+                    resources = DEFAULT_RESOURCES;
+                    saveResources();
+                    showNotification('⚠️ 使用默认数据', 'info');
+                }
+            } else {
+                // 都失败，使用默认数据
+                resources = DEFAULT_RESOURCES;
+                saveResources();
+                showNotification('⚠️ 使用默认数据', 'info');
+            }
+        }
+
+        // 保存资源到localStorage
+        function saveResources() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(resources));
+                localStorage.setItem(VERSION_KEY, DATA_VERSION);
+                updateStats();
+            } catch (error) {
+                showNotification('❌ 保存失败：' + error.message, 'error');
+            }
+        }
+
+        // 同步到JSON（导出功能）
+        function syncToJSON() {
+            try {
+                const jsonData = JSON.stringify(resources, null, 2);
+                const blob = new Blob([jsonData], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'data.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showNotification('✅ 已导出 data.json，包含 ' + resources.length + ' 条资源\n\n请将此文件替换到GitHub仓库中', 'success');
+            } catch (error) {
+                showNotification('❌ 导出失败：' + error.message, 'error');
+            }
+        }
+
+        // 更新统计信息
+        function updateStats() {
+            const total = resources.length;
+            const tools = resources.filter(r => r.category === 'tool').length;
+            const wikis = resources.filter(r => r.category === 'wiki').length;
+            const quips = resources.filter(r => r.category === 'quip').length;
+
+            document.getElementById('stats').innerHTML = `
+                📊 总计: <strong>${total}</strong> | 
+                🔧 工具: <strong>${tools}</strong> | 
+                📖 Wiki: <strong>${wikis}</strong> | 
+                💡 Quip: <strong>${quips}</strong>
+            `;
+        }
+
+        // 显示资源列表
+        function displayResources() {
+            const resultsSection = document.getElementById('resultsSection');
+            const noResults = document.getElementById('noResults');
+            const searchInput = document.getElementById('searchInput');
+
+            const searchTerm = searchInput.value.toLowerCase();
+            let filtered = resources;
+
+            if (currentFilter !== 'all') {
+                filtered = filtered.filter(r => r.category === currentFilter);
+            }
+
+            if (searchTerm) {
+                filtered = filtered.filter(r => 
+                    r.title.toLowerCase().includes(searchTerm) ||
+                    r.description.toLowerCase().includes(searchTerm) ||
+                    r.url.toLowerCase().includes(searchTerm)
+                );
+            }
+
+            if (filtered.length === 0) {
+                resultsSection.style.display = 'none';
+                noResults.style.display = 'block';
+                return;
+            }
+
+            resultsSection.style.display = 'grid';
+            noResults.style.display = 'none';
+
+            resultsSection.innerHTML = filtered.map(resource => `
+                <div class="resource-card">
+                    <span class="category-badge ${resource.category}">
+                        ${getCategoryIcon(resource.category)} ${getCategoryName(resource.category)}
+                    </span>
+                    <h3>${highlightText(resource.title, searchTerm)}</h3>
+                    <a href="${resource.url}" target="_blank" class="url" rel="noopener noreferrer">${resource.url}</a>
+                    <p class="description">${highlightText(resource.description, searchTerm)}</p>
+                    <div class="actions ${isAdmin ? '' : 'hidden'}">
+                        <button class="edit-btn" onclick="editResource(${resource.id})">✏️ 编辑</button>
+                        <button class="delete-btn" onclick="deleteResource(${resource.id})">🗑️ 删除</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 获取分类图标
+        function getCategoryIcon(category) {
+            const icons = { tool: '🔧', wiki: '📖', quip: '💡' };
+            return icons[category] || '📌';
+        }
+
+        // 获取分类名称
+        function getCategoryName(category) {
+            const names = { tool: '工具', wiki: 'Wiki', quip: 'Quip' };
+            return names[category] || category.toUpperCase();
+        }
+
+        // 高亮搜索词
+        function highlightText(text, searchTerm) {
+            if (!searchTerm || !text) return text;
+            const regex = new RegExp(`(${searchTerm})`, 'gi');
+            return text.replace(regex, '<mark style="background: #ffeb3b; padding: 2px;">$1</mark>');
+        }
+
+        // 搜索资源
+        function searchResources() {
+            displayResources();
+        }
+
+        // 按分类筛选
+        function filterByCategory(category) {
+            currentFilter = category;
+            document.querySelectorAll('.category-tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.dataset.category === category) {
+                    tab.classList.add('active');
+                }
+            });
+            displayResources();
+        }
+
+        // 检查认证状态
+        function checkAuth() {
+            const authData = localStorage.getItem(AUTH_KEY);
+            if (authData) {
+                try {
+                    const { expiry } = JSON.parse(authData);
+                    if (Date.now() < expiry) {
+                        isAdmin = true;
+                        updateAuthUI();
+                        return true;
+                    } else {
+                        localStorage.removeItem(AUTH_KEY);
+                    }
+                } catch (e) {
+                    localStorage.removeItem(AUTH_KEY);
+                }
+            }
+            isAdmin = false;
+            updateAuthUI();
+            return false;
+        }
+
+        // 更新认证UI
+        function updateAuthUI() {
+            const authStatus = document.getElementById('authStatus');
+            const authButtons = document.getElementById('authButtons');
+            const addButton = document.getElementById('addButton');
+
+            if (isAdmin) {
+                authStatus.className = 'auth-status admin';
+                authStatus.textContent = '✅ 管理员模式';
+                authButtons.innerHTML = `
+                    <button class="btn btn-logout" onclick="handleLogout()">🚪 退出登录</button>
+                    <button class="btn btn-sync" onclick="syncToJSON()">💾 同步到JSON</button>
+                `;
+                addButton.classList.add('show');
+            } else {
+                authStatus.className = 'auth-status readonly';
+                authStatus.textContent = '🔒 只读模式';
+                authButtons.innerHTML = `
+                    <button class="btn btn-login" onclick="showLoginModal()">🔑 管理员登录</button>
+                    <button class="btn btn-sync" onclick="syncToJSON()">💾 同步到JSON</button>
+                `;
+                addButton.classList.remove('show');
+            }
+            displayResources();
+        }
+
+        // 显示登录模态框
+        function showLoginModal() {
+            document.getElementById('loginModal').classList.add('active');
+            document.getElementById('password').focus();
+        }
+
+        // 关闭登录模态框
+        function closeLoginModal() {
+            document.getElementById('loginModal').classList.remove('active');
+            document.getElementById('loginForm').reset();
+        }
+
+        // 处理登录
+        async function handleLogin(event) {
+            event.preventDefault();
+            const password = document.getElementById('password').value;
+            const rememberMe = document.getElementById('rememberMe').checked;
+
+            const hash = await sha256(password);
+
+            if (hash === PASSWORD_HASH) {
+                const expiry = rememberMe 
+                    ? Date.now() + (7 * 24 * 60 * 60 * 1000)
+                    : Date.now() + (60 * 60 * 1000);
+
+                localStorage.setItem(AUTH_KEY, JSON.stringify({ expiry }));
+                isAdmin = true;
+                updateAuthUI();
+                closeLoginModal();
+                showNotification('✅ 登录成功！', 'success');
+            } else {
+                showNotification('❌ 密码错误！', 'error');
+                document.getElementById('password').value = '';
+                document.getElementById('password').focus();
+            }
+        }
+
+        // 处理登出
+        function handleLogout() {
+            if (confirm('确定要退出登录吗？')) {
+                localStorage.removeItem(AUTH_KEY);
+                isAdmin = false;
+                updateAuthUI();
+                showNotification('✅ 已退出登录', 'success');
+            }
+        }
+
+        // 打开模态框
+        function openModal(id = null) {
+            if (!isAdmin && id === null) {
+                showNotification('❌ 请先登录管理员账号', 'error');
+                return;
+            }
+
+            const modal = document.getElementById('modal');
+            const modalTitle = document.getElementById('modalTitle');
+            const form = document.getElementById('resourceForm');
+
+            editingId = id;
+
+            if (id) {
+                const resource = resources.find(r => r.id === id);
+                if (resource) {
+                    modalTitle.textContent = '编辑资源';
+                    document.getElementById('title').value = resource.title;
+                    document.getElementById('url').value = resource.url;
+                    document.getElementById('category').value = resource.category;
+                    document.getElementById('description').value = resource.description;
+                }
+            } else {
+                modalTitle.textContent = '添加新资源';
+                form.reset();
+            }
+
+            modal.classList.add('active');
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+            document.getElementById('resourceForm').reset();
+            editingId = null;
+        }
+
+        // 保存资源
+        function saveResource(event) {
+            event.preventDefault();
+
+            if (!isAdmin) {
+                showNotification('❌ 需要管理员权限', 'error');
+                return;
+            }
+
+            const title = document.getElementById('title').value.trim();
+            const url = document.getElementById('url').value.trim();
+            const category = document.getElementById('category').value;
+            const description = document.getElementById('description').value.trim();
+
+            if (!title || !url || !category) {
+                showNotification('❌ 请填写所有必填项', 'error');
+                return;
+            }
+
+            if (editingId) {
+                const index = resources.findIndex(r => r.id === editingId);
+                if (index !== -1) {
+                    resources[index] = {
+                        ...resources[index],
+                        title,
+                        url,
+                        category,
+                        description
+                    };
+                    showNotification('✅ 资源已更新\n\n💡 请点击"同步到JSON"按钮导出更新后的数据', 'success');
+                }
+            } else {
+                const newResource = {
+                    id: Date.now(),
+                    title,
+                    url,
+                    category,
+                    description
+                };
+                resources.unshift(newResource);
+                showNotification('✅ 资源已添加\n\n💡 请点击"同步到JSON"按钮导出更新后的数据', 'success');
+            }
+
+            saveResources();
+            displayResources();
+            closeModal();
+        }
+
+        // 编辑资源
+        function editResource(id) {
+            if (!isAdmin) {
+                showNotification('❌ 需要管理员权限', 'error');
+                return;
+            }
+            openModal(id);
+        }
+
+        // 删除资源
+        function deleteResource(id) {
+            if (!isAdmin) {
+                showNotification('❌ 需要管理员权限', 'error');
+                return;
+            }
+
+            const resource = resources.find(r => r.id === id);
+            if (resource && confirm(`确定要删除 "${resource.title}" 吗？`)) {
+                resources = resources.filter(r => r.id !== id);
+                saveResources();
+                displayResources();
+                showNotification('✅ 资源已删除\n\n💡 请点击"同步到JSON"按钮导出更新后的数据', 'success');
+            }
+        }
+
+        // 显示通知
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type} show`;
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 5000);
+        }
+
+        // 关闭模态框（点击外部）
+        document.getElementById('modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        document.getElementById('loginModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeLoginModal();
+            }
+        });
+
+        // 初始化应用
+        async function init() {
+            checkAuth();
+            await initResources();
+            displayResources();
+            updateStats();
+
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('input', searchResources);
+            }
+        }
+
+        // 启动应用
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
