@@ -1,5 +1,12 @@
 [
   {
+    "id": 1778123603196,
+    "title": "Share large files with MediaTek",
+    "url": "https://wiki.labcollab.net/confluence/pages/viewpage.action?pageId=2340083776",
+    "category": "wiki",
+    "description": "How to share large files with MediaTek (log files, Video files, etc. needed for debugging)"
+  },
+  {
     "id": 1776147240038,
     "title": "TestRail Manager Script",
     "url": "https://wiki.labcollab.net/confluence/pages/viewpage.action?pageId=2558065119",
