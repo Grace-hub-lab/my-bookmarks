@@ -1,1 +1,9 @@
-[]
+{
+  "encrypted": true,
+  "version": 1,
+  "kdf": "PBKDF2-SHA256",
+  "iterations": 600000,
+  "salt": "Q8I0ZXMYl7b01jZeBM8+ew==",
+  "iv": "xjN3d/6LRD9rZin/",
+  "data": "YkaNC0lNi25UYtJtXpTfy2DB"
+}
