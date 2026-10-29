@@ -1,0 +1,2110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📚 书签管理器</title>
+    <style>
+        :root {
+            --topbar: #1b2333;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg: #eef2f7;
+            --sidebar: #f8fafc;
+            --border: #e2e8f0;
+            --text: #1e293b;
+            --muted: #64748b;
+            --danger: #dc2626;
+            --warn-bg: #fffbeb;
+            --warn-text: #b45309;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans SC', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 14px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        button { font-family: inherit; }
+
+        /* ========== 顶栏 ========== */
+        .topbar {
+            height: 56px;
+            background: var(--topbar);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            flex-shrink: 0;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .brand-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17px;
+        }
+
+        .auth-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+        }
+
+        .auth-status { opacity: 0.85; }
+        .auth-status.admin { color: #86efac; opacity: 1; }
+
+        .topbar-btn {
+            background: transparent;
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 6px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .topbar-btn:hover { background: rgba(255,255,255,0.1); }
+
+        /* ========== 主体布局 ========== */
+        .layout {
+            flex: 1;
+            display: flex;
+            min-height: 0;
+        }
+
+        .sidebar {
+            width: 220px;
+            background: var(--sidebar);
+            border-right: 1px solid var(--border);
+            padding: 16px 10px;
+            overflow-y: auto;
+            flex-shrink: 0;
+            transition: width 0.2s;
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 8px 16px;
+            font-weight: 700;
+            font-size: 15px;
+        }
+
+        .collapse-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--muted);
+            font-size: 16px;
+            width: 26px;
+            height: 26px;
+            border-radius: 6px;
+        }
+
+        .collapse-btn:hover { background: var(--border); }
+
+        .nav-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--muted);
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 18px 10px 8px;
+        }
+
+        .nav-item {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 10px;
+            border: none;
+            background: none;
+            border-radius: 8px;
+            cursor: pointer;
+            color: #334155;
+            font-size: 13.5px;
+            text-align: left;
+        }
+
+        .nav-item:hover { background: #eef2f7; }
+
+        .nav-item.active {
+            background: #e0e9fb;
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .nav-icon { width: 18px; text-align: center; flex-shrink: 0; }
+        .nav-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .nav-count {
+            font-size: 11.5px;
+            color: var(--muted);
+            background: #e8edf3;
+            border-radius: 10px;
+            padding: 1px 8px;
+        }
+
+        .nav-item.active .nav-count { background: #c9d8f7; color: var(--primary); }
+
+        /* 收起的侧栏：只显示图标 */
+        .sidebar.collapsed { width: 60px; }
+        .sidebar.collapsed .sidebar-title,
+        .sidebar.collapsed .nav-label,
+        .sidebar.collapsed .nav-count,
+        .sidebar.collapsed .nav-section-title { display: none; }
+        .sidebar.collapsed .sidebar-header { justify-content: center; padding-left: 0; padding-right: 0; }
+        .sidebar.collapsed .collapse-btn { transform: rotate(180deg); }
+        .sidebar.collapsed .nav-item { justify-content: center; }
+
+        .main {
+            flex: 1;
+            padding: 24px 28px;
+            overflow: auto;
+            min-width: 0;
+        }
+
+        /* ========== 页面标题行 ========== */
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .page-title {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            flex-wrap: wrap;
+            min-width: 0;
+        }
+
+        .page-title h1 { font-size: 22px; font-weight: 700; }
+        .page-title .count { color: var(--muted); font-size: 13px; }
+
+        .last-updated {
+            color: var(--muted);
+            font-size: 12.5px;
+            max-width: 460px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .last-updated a { color: inherit; text-decoration: none; }
+        .last-updated a:hover { color: var(--primary); text-decoration: underline; }
+
+        .header-actions { display: flex; gap: 10px; }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 9px 16px;
+            font-size: 13.5px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .btn-icon {
+            width: 38px;
+            height: 38px;
+            border: 1px solid var(--border);
+            background: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+        }
+
+        .btn-icon:hover { background: #f1f5f9; }
+
+        .btn-default {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-size: 13px;
+            cursor: pointer;
+            color: var(--text);
+        }
+
+        .btn-default:hover { background: #f1f5f9; }
+
+        /* ========== 筛选行 ========== */
+        .filter-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+
+        .filter-bar input,
+        .filter-bar select {
+            border: 1px solid var(--border);
+            background: #fff;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-family: inherit;
+            color: var(--text);
+        }
+
+        .filter-bar input { width: 280px; }
+        .filter-bar select { min-width: 140px; }
+
+        .filter-bar input:focus,
+        .filter-bar select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+        }
+
+        /* ========== 表格 ========== */
+        .table-card {
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(15,23,42,0.08);
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 760px;
+        }
+
+        thead th {
+            text-align: left;
+            font-size: 11.5px;
+            font-weight: 600;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 12px 14px;
+            background: #f8fafc;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { color: var(--primary); }
+        .sort-arrow { color: var(--primary); margin-left: 4px; }
+
+        tbody td {
+            padding: 11px 14px;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+        }
+
+        tbody tr:hover { background: #f8fafc; }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody tr.pinned { background: #fffdf5; }
+        tbody tr.pinned:hover { background: #fff9e6; }
+
+        .col-star { width: 44px; padding-right: 0 !important; }
+
+        .star-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 17px;
+            line-height: 1;
+            color: #cbd5e1;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+
+        .star-btn:hover { color: #f59e0b; background: #fef3c7; }
+        .star-btn.on { color: #f59e0b; }
+
+        .col-title a {
+            color: var(--text);
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .col-title a:hover { color: var(--primary); text-decoration: underline; }
+
+        .col-url {
+            max-width: 320px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .col-url a { color: var(--primary); text-decoration: none; font-size: 12.5px; }
+        .col-url a:hover { text-decoration: underline; }
+
+        .col-desc { color: var(--muted); max-width: 360px; }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .badge.tool { background: #e3f2fd; color: #1976d2; }
+        .badge.wiki { background: #f3e5f5; color: #7b1fa2; }
+        .badge.quip { background: #fff3e0; color: #e65100; }
+
+        .col-actions { white-space: nowrap; }
+
+        .link-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            padding: 4px 6px;
+            border-radius: 4px;
+            color: var(--primary);
+        }
+
+        .link-btn:hover { background: #eef2ff; }
+        .link-btn.danger { color: var(--danger); }
+        .link-btn.danger:hover { background: #fef2f2; }
+
+        .empty-row td {
+            text-align: center;
+            color: var(--muted);
+            padding: 48px 16px;
+        }
+
+        mark { background: #fde68a; padding: 0 2px; border-radius: 2px; }
+
+        /* 非管理员隐藏管理功能 */
+        body:not(.is-admin) .admin-only { display: none !important; }
+
+        /* ========== 弹窗 ========== */
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15,23,42,0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active { display: flex; }
+
+        .modal-content {
+            background: #fff;
+            border-radius: 12px;
+            padding: 26px;
+            max-width: 480px;
+            width: 92%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 50px rgba(15,23,42,0.25);
+        }
+
+        .modal-content.wide { max-width: 820px; }
+
+        .modal-content h2 { font-size: 18px; margin-bottom: 18px; }
+
+        .form-group { margin-bottom: 16px; }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: #475569;
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+        }
+
+        .form-group textarea { resize: vertical; min-height: 90px; }
+
+        .form-hint { color: var(--muted); font-size: 12px; margin-top: 5px; }
+
+        .field-warning {
+            margin-top: 6px;
+            font-size: 12.5px;
+            color: var(--warn-text);
+            background: var(--warn-bg);
+            border-radius: 6px;
+            padding: 6px 10px;
+        }
+
+        .notice {
+            background: var(--warn-bg);
+            color: var(--warn-text);
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .checkbox-group { display: flex; align-items: center; gap: 8px; }
+        .checkbox-group input { width: auto; }
+        .checkbox-group label { margin: 0; }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 22px;
+        }
+
+        .modal-hint {
+            margin-top: 14px;
+            color: var(--muted);
+            font-size: 12.5px;
+            line-height: 1.7;
+        }
+
+        .modal-hint a { color: var(--primary); }
+
+        [hidden] { display: none !important; }
+
+        /* ========== 导入预览 ========== */
+        .import-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .import-summary {
+            font-size: 13px;
+            color: var(--muted);
+            margin: 4px 0 8px;
+        }
+
+        .import-preview {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            max-height: 320px;
+            overflow: auto;
+        }
+
+        .import-preview table { min-width: 0; font-size: 13px; }
+        .import-preview td, .import-preview th { padding: 7px 10px; }
+        .import-preview .col-url { max-width: 260px; }
+        .import-preview tr.dup td { color: #94a3b8; }
+
+        .tag-dup {
+            font-size: 11px;
+            background: #f1f5f9;
+            color: var(--muted);
+            border-radius: 8px;
+            padding: 1px 6px;
+            margin-left: 6px;
+        }
+
+        /* ========== 加密：解锁面板 / 提示条 ========== */
+        .lock-panel {
+            max-width: 440px;
+            margin: 48px auto;
+            background: #fff;
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 1px 3px rgba(15,23,42,0.08);
+        }
+
+        .lock-panel h2 { font-size: 18px; margin-bottom: 8px; }
+        .lock-panel p { color: var(--muted); font-size: 13px; line-height: 1.7; margin-bottom: 18px; }
+        .lock-panel .btn-primary { width: 100%; margin-top: 4px; }
+
+        .banner {
+            background: var(--warn-bg);
+            color: var(--warn-text);
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 13px;
+            flex-wrap: wrap;
+        }
+
+        .input-row { display: flex; gap: 8px; }
+        .input-row input { flex: 1; }
+        .input-row .btn-default { white-space: nowrap; }
+
+        /* ========== 通知 ========== */
+        .notification {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: #fff;
+            padding: 12px 18px;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(15,23,42,0.2);
+            z-index: 3000;
+            display: none;
+            font-size: 13.5px;
+            max-width: 380px;
+            line-height: 1.6;
+            animation: slideIn 0.25s ease-out;
+        }
+
+        .notification.show { display: block; }
+        .notification.success { border-left: 4px solid #16a34a; }
+        .notification.error { border-left: 4px solid var(--danger); }
+        .notification.info { border-left: 4px solid var(--primary); }
+
+        @keyframes slideIn {
+            from { transform: translateX(40px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* ========== 响应式 ========== */
+        @media (max-width: 768px) {
+            .sidebar { width: 60px; }
+            .sidebar .sidebar-title,
+            .sidebar .nav-label,
+            .sidebar .nav-count,
+            .sidebar .nav-section-title,
+            .sidebar .collapse-btn { display: none; }
+            .sidebar .nav-item { justify-content: center; }
+            .main { padding: 16px; }
+            .filter-bar input { width: 100%; }
+            .auth-status { display: none; }
+            .import-options { grid-template-columns: 1fr; }
+            .last-updated { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶栏 -->
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-logo" aria-hidden="true">📚</div>
+            <span>Bookmark Manager</span>
+        </div>
+        <div class="auth-area" id="authArea"></div>
+    </header>
+
+    <div class="layout">
+        <!-- 侧栏 -->
+        <nav class="sidebar" id="sidebar" aria-label="资源分类">
+            <div class="sidebar-header">
+                <span class="sidebar-title">资源中心</span>
+                <button class="collapse-btn" onclick="toggleSidebar()" aria-label="收起/展开侧栏" title="收起/展开">‹</button>
+            </div>
+
+            <button class="nav-item active" data-category="all" title="全部资源">
+                <span class="nav-icon">🗂️</span><span class="nav-label">全部资源</span><span class="nav-count" id="count-all">0</span>
+            </button>
+            <button class="nav-item" data-category="fav" title="我的收藏（仅保存在本浏览器）">
+                <span class="nav-icon">⭐</span><span class="nav-label">我的收藏</span><span class="nav-count" id="count-fav">0</span>
+            </button>
+
+            <div class="nav-section-title">分类</div>
+            <div id="categoryNav"></div>
+
+            <div class="nav-section-title">操作</div>
+            <button class="nav-item" onclick="manualRefresh()" title="刷新数据">
+                <span class="nav-icon">🔄</span><span class="nav-label">刷新数据</span>
+            </button>
+            <button class="nav-item admin-only" onclick="openImportModal()" title="批量导入">
+                <span class="nav-icon">📥</span><span class="nav-label">批量导入</span>
+            </button>
+            <button class="nav-item" onclick="syncToJSON()" title="导出备份">
+                <span class="nav-icon">💾</span><span class="nav-label">导出备份</span>
+            </button>
+            <button class="nav-item admin-only" onclick="openKeyModal()" title="设置 / 更换团队密码">
+                <span class="nav-icon">🔐</span><span class="nav-label">团队密码</span>
+            </button>
+        </nav>
+
+        <!-- 主内容 -->
+        <main class="main">
+            <div class="page-header">
+                <div class="page-title">
+                    <h1 id="pageTitle">全部资源</h1>
+                    <span class="count" id="resultCount">加载中...</span>
+                    <span class="last-updated" id="lastUpdated"></span>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-default admin-only" onclick="openImportModal()">📥 导入</button>
+                    <button class="btn-primary admin-only" onclick="openModal()">＋ 添加资源</button>
+                    <button class="btn-icon" onclick="syncToJSON()" aria-label="导出备份" title="导出备份">⬇</button>
+                </div>
+            </div>
+
+            <!-- 管理员可见：数据还没加密 -->
+            <div class="banner admin-only" id="plainBanner" hidden>
+                <span>⚠️ 当前数据未加密，任何人直接访问 data.json 都能看到全部内容。设置团队密码后才能继续编辑。</span>
+                <button class="btn-primary" onclick="openKeyModal()">🔐 设置团队密码</button>
+            </div>
+
+            <!-- 数据已加密、本机还没有密码时显示 -->
+            <div class="lock-panel" id="lockPanel" hidden>
+                <h2>🔒 请输入团队密码</h2>
+                <p>书签数据已加密，输入团队密码后即可查看。密码请向团队管理员获取。</p>
+                <form onsubmit="handleUnlock(event)">
+                    <div class="form-group">
+                        <label for="unlockPassword">团队密码</label>
+                        <input type="password" id="unlockPassword" required autocomplete="current-password">
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="unlockRemember" checked>
+                            <label for="unlockRemember">在本浏览器记住（公用电脑请取消勾选）</label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary" id="unlockBtn">解锁</button>
+                </form>
+            </div>
+
+            <div id="contentArea">
+            <div class="filter-bar">
+                <input type="text" id="searchInput" placeholder="搜索标题、描述、分类或 URL..." aria-label="搜索">
+                <select id="categorySelect" onchange="filterByCategory(this.value)" aria-label="分类"></select>
+                <button class="btn-default" onclick="resetFilters()">重置</button>
+            </div>
+
+            <div class="table-card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="col-star" title="收藏的资源会置顶显示">★</th>
+                            <th class="sortable" onclick="toggleSort('title')">标题<span class="sort-arrow" id="sort-title"></span></th>
+                            <th class="sortable" onclick="toggleSort('category')">分类<span class="sort-arrow" id="sort-category"></span></th>
+                            <th>链接</th>
+                            <th>描述</th>
+                            <th class="admin-only">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                        <tr class="empty-row"><td colspan="6">正在加载资源数据...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 分类候选（添加/导入时使用） -->
+    <datalist id="categoryList"></datalist>
+
+    <!-- 登录弹窗 -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content" role="dialog" aria-labelledby="loginTitle">
+            <h2 id="loginTitle">🔑 管理员登录</h2>
+            <div class="notice" id="loginNotice" hidden></div>
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="password">GitHub Token *</label>
+                    <input type="password" id="password" required placeholder="github_pat_... 或 ghp_..." autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="rememberMe">
+                        <label for="rememberMe">在本浏览器记住 Token</label>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-default" onclick="closeLoginModal()">取消</button>
+                    <button type="submit" class="btn-primary" id="loginSubmitBtn">登录</button>
+                </div>
+            </form>
+            <p class="modal-hint">
+                💡 需要对仓库有写权限的 Token。修改会直接提交到 GitHub 的 data.json，所有人刷新后（约 1 分钟内）可见。<br>
+                <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">创建新 Token</a>
+                ·
+                <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener noreferrer">管理 / Regenerate 已有 Token</a><br>
+                （Repository access 只选 my-bookmarks，权限 Contents: Read and write）
+            </p>
+        </div>
+    </div>
+
+    <!-- 资源编辑弹窗 -->
+    <div class="modal" id="modal">
+        <div class="modal-content" role="dialog" aria-labelledby="modalTitle">
+            <h2 id="modalTitle">添加新资源</h2>
+            <form id="resourceForm" onsubmit="saveResource(event)">
+                <div class="form-group">
+                    <label for="title">标题 *</label>
+                    <input type="text" id="title" required maxlength="200">
+                </div>
+                <div class="form-group">
+                    <label for="url">URL *</label>
+                    <input type="url" id="url" required placeholder="https://example.com">
+                    <div class="field-warning" id="dupWarning" hidden></div>
+                </div>
+                <div class="form-group">
+                    <label for="category">分类 *</label>
+                    <input type="text" id="category" list="categoryList" required maxlength="30"
+                           placeholder="选择已有分类，或输入新分类（如 Jira）" autocomplete="off">
+                    <div class="form-hint">输入列表里没有的名字，就会自动新建这个分类</div>
+                </div>
+                <div class="form-group">
+                    <label for="description">描述</label>
+                    <textarea id="description" placeholder="简要描述该资源..." maxlength="1000"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-default" onclick="closeModal()">取消</button>
+                    <button type="submit" class="btn-primary save-btn">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 批量导入弹窗 -->
+    <div class="modal" id="importModal">
+        <div class="modal-content wide" role="dialog" aria-labelledby="importTitle">
+            <h2 id="importTitle">📥 批量导入</h2>
+            <div class="form-group">
+                <label for="importFile">选择文件</label>
+                <input type="file" id="importFile" accept=".html,.htm,.json" onchange="handleImportFile(event)">
+                <div class="form-hint">
+                    支持浏览器导出的书签 HTML（Chrome / Edge：书签管理器 → ⋮ → 导出书签），或本站「导出备份」的 data.json
+                </div>
+            </div>
+
+            <div id="importBody" hidden>
+                <div class="import-options">
+                    <div class="form-group">
+                        <label for="importMode">分类方式</label>
+                        <select id="importMode" onchange="renderImportPreview()">
+                            <option value="folder">按书签文件夹 / 文件里的分类</option>
+                            <option value="fixed">全部归入同一个分类</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="importCategory" id="importCategoryLabel">没有文件夹时使用的分类</label>
+                        <input type="text" id="importCategory" list="categoryList" maxlength="30" value="工具"
+                               oninput="renderImportPreview()" autocomplete="off">
+                    </div>
+                </div>
+
+                <div class="import-summary" id="importSummary"></div>
+                <div class="import-preview">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px"><input type="checkbox" id="importSelectAll" onchange="toggleImportAll(this.checked)" aria-label="全选"></th>
+                                <th>标题</th>
+                                <th>分类</th>
+                                <th>链接</th>
+                            </tr>
+                        </thead>
+                        <tbody id="importPreviewBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-default" onclick="closeImportModal()">取消</button>
+                <button type="button" class="btn-primary" id="importSubmitBtn" onclick="submitImport()" disabled>导入</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置 / 更换团队密码 -->
+    <div class="modal" id="keyModal">
+        <div class="modal-content" role="dialog" aria-labelledby="keyTitle">
+            <h2 id="keyTitle">🔐 设置团队密码</h2>
+            <form id="keyForm" onsubmit="handleChangeKey(event)">
+                <div class="form-group">
+                    <label for="newTeamPassword">新密码 *（至少 12 位）</label>
+                    <div class="input-row">
+                        <input type="text" id="newTeamPassword" required minlength="12" autocomplete="off" spellcheck="false">
+                        <button type="button" class="btn-default" onclick="suggestPassword()">随机生成</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="confirmTeamPassword">再输入一次 *</label>
+                    <input type="text" id="confirmTeamPassword" required minlength="12" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="notice">
+                    密文是公开的，别人可以离线反复猜密码，所以请用<strong>随机生成</strong>的长密码，不要用常见单词或生日。<br>
+                    保存后：数据会用新密码重新加密；其他人下次打开需要输入新密码。请把新密码通过私聊发给同事，并自己妥善保存——<strong>忘记密码数据将无法恢复</strong>（可用「导出备份」留一份明文备份在本地）。
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-default" onclick="closeKeyModal()">取消</button>
+                    <button type="submit" class="btn-primary" id="keySubmitBtn">保存并加密</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="notification" id="notification" role="status" aria-live="polite"></div>
+
+    <script>
+        // ================= 配置 =================
+        // 数据存放在 GitHub 仓库里的 data.json（加密后），所有人都读它；管理员通过 GitHub API 直接提交修改
+        const GH_OWNER = 'Grace-hub-lab';
+        const GH_REPO = 'my-bookmarks';
+        const GH_BRANCH = 'main';
+        const DATA_PATH = 'data.json';
+        const API_BASE = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}`;
+        const API_URL = `${API_BASE}/contents/${DATA_PATH}`;
+        const HISTORY_URL = `https://github.com/${GH_OWNER}/${GH_REPO}/commits/${GH_BRANCH}/${DATA_PATH}`;
+
+        const CACHE_KEY = 'bookmarkCacheRaw';      // 缓存原始文件（加密的就是密文），仅作离线兜底
+        const TOKEN_KEY = 'bookmarkGhToken';
+        const TEAM_KEY = 'bookmarkTeamKey';        // 派生出的解密密钥（不存明文密码）
+        const SIDEBAR_KEY = 'bookmarkSidebarCollapsed';
+        const FAV_KEY = 'bookmarkFavorites';       // 个人收藏，只存在本浏览器
+        const AUTO_REFRESH_MS = 60 * 1000;
+        const PBKDF2_ITERATIONS = 600000;
+        const MIN_PASSWORD_LENGTH = 12;
+
+        // 清理旧版本遗留的 localStorage（包括旧版的明文缓存）
+        ['bookmarkResources', 'bookmarkDataVersion', 'bookmarkAuth', 'bookmarkCache'].forEach(k => localStorage.removeItem(k));
+
+        // 内置分类（保持老数据兼容）；其他分类直接用名字作为 key
+        const BUILTIN_CATEGORIES = {
+            tool: { name: '工具', icon: '🔧' },
+            wiki: { name: 'Wiki', icon: '📖' },
+            quip: { name: 'Quip', icon: '💡' }
+        };
+        const CUSTOM_PALETTE = [
+            ['#e0f2f1', '#00796b'], ['#fce4ec', '#c2185b'], ['#ede7f6', '#512da8'],
+            ['#e8f5e9', '#2e7d32'], ['#fff8e1', '#b26a00'], ['#e1f5fe', '#0277bd'],
+            ['#efebe9', '#5d4037'], ['#f1f8e9', '#558b2f']
+        ];
+
+        // ================= 全局状态 =================
+        let resources = [];
+        let rawRemote = null;          // 最近一次拿到的 data.json 原始内容（数组=明文，对象=密文）
+        let dataState = 'loading';     // 'loading' | 'plain' | 'locked' | 'unlocked' | 'empty'
+        let teamKey = null;            // CryptoKey
+        let teamSalt = null;           // 当前密钥对应的 salt（base64）
+        let currentFilter = 'all';     // 'all' | 'fav' | 分类 key
+        let editingId = null;
+        let isAdmin = false;
+        let ghToken = null;
+        let saving = false;
+        let sortKey = null;            // 'title' | 'category' | null（默认按最新添加）
+        let sortAsc = true;
+        let lastDataSignature = null;
+        let importItems = [];
+        let favorites = loadFavorites();
+
+        // ================= 工具函数 =================
+        function escapeHtml(str) {
+            return String(str ?? '').replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        function safeUrl(url) {
+            return /^https?:\/\//i.test(url || '') ? url : '#';
+        }
+
+        function bytesToBase64(bytes) {
+            let bin = '';
+            for (let i = 0; i < bytes.length; i += 0x8000) {
+                bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            }
+            return btoa(bin);
+        }
+
+        function base64ToBytes(b64) {
+            const bin = atob(String(b64).replace(/\s/g, ''));
+            return Uint8Array.from(bin, c => c.charCodeAt(0));
+        }
+
+        // UTF-8 安全的 base64（GitHub API 要求 base64，btoa 不支持中文）
+        function utf8ToBase64(str) {
+            return bytesToBase64(new TextEncoder().encode(str));
+        }
+
+        function base64ToUtf8(b64) {
+            return new TextDecoder().decode(base64ToBytes(b64));
+        }
+
+        function formatDate(date) {
+            const pad = n => String(n).padStart(2, '0');
+            const sameYear = date.getFullYear() === new Date().getFullYear();
+            return `${sameYear ? '' : date.getFullYear() + '年'}${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+
+        // 用于判重：忽略协议、www、末尾斜杠和大小写
+        function normalizeUrl(url) {
+            const raw = String(url || '').trim();
+            try {
+                const u = new URL(raw);
+                const host = u.host.toLowerCase().replace(/^www\./, '');
+                const path = u.pathname.replace(/\/+$/, '');
+                return (host + path + u.search + u.hash).toLowerCase();
+            } catch {
+                return raw.toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+            }
+        }
+
+        function findDuplicate(url, excludeId = null, list = resources) {
+            const n = normalizeUrl(url);
+            if (!n) return null;
+            return list.find(r => r.id !== excludeId && normalizeUrl(r.url) === n) || null;
+        }
+
+        // ================= 加密 =================
+        // 格式：{ encrypted: true, version: 1, kdf, iterations, salt, iv, data }
+        // AES-256-GCM 自带完整性校验：密码错误时解密直接失败，不需要额外存校验值
+        function isEncrypted(raw) {
+            return !!raw && !Array.isArray(raw) && raw.encrypted === true && raw.data && raw.salt && raw.iv;
+        }
+
+        async function deriveKey(password, saltB64, iterations = PBKDF2_ITERATIONS) {
+            const baseKey = await crypto.subtle.importKey(
+                'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+            return crypto.subtle.deriveKey(
+                { name: 'PBKDF2', salt: base64ToBytes(saltB64), iterations: Math.min(iterations, 5000000), hash: 'SHA-256' },
+                baseKey,
+                { name: 'AES-GCM', length: 256 },
+                true,
+                ['encrypt', 'decrypt']);
+        }
+
+        async function encryptList(list, key, saltB64) {
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const plain = new TextEncoder().encode(JSON.stringify(list));
+            const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain));
+            return {
+                encrypted: true,
+                version: 1,
+                kdf: 'PBKDF2-SHA256',
+                iterations: PBKDF2_ITERATIONS,
+                salt: saltB64,
+                iv: bytesToBase64(iv),
+                data: bytesToBase64(cipher)
+            };
+        }
+
+        async function decryptList(envelope, key) {
+            const plain = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: base64ToBytes(envelope.iv) }, key, base64ToBytes(envelope.data));
+            const list = JSON.parse(new TextDecoder().decode(plain));
+            if (!Array.isArray(list)) throw new Error('解密后的数据格式不正确');
+            return list;
+        }
+
+        function newSalt() {
+            return bytesToBase64(crypto.getRandomValues(new Uint8Array(16)));
+        }
+
+        // 本机保存的是派生后的密钥（不是明文密码），和 salt 绑定；密码一换 salt 就变，旧密钥自动失效
+        async function storeTeamKey(key, saltB64, remember) {
+            const raw = new Uint8Array(await crypto.subtle.exportKey('raw', key));
+            const value = JSON.stringify({ salt: saltB64, key: bytesToBase64(raw) });
+            localStorage.removeItem(TEAM_KEY);
+            sessionStorage.removeItem(TEAM_KEY);
+            (remember ? localStorage : sessionStorage).setItem(TEAM_KEY, value);
+        }
+
+        async function loadStoredTeamKey() {
+            const value = localStorage.getItem(TEAM_KEY) || sessionStorage.getItem(TEAM_KEY);
+            if (!value) return;
+            try {
+                const { salt, key } = JSON.parse(value);
+                teamKey = await crypto.subtle.importKey('raw', base64ToBytes(key), 'AES-GCM', true, ['encrypt', 'decrypt']);
+                teamSalt = salt;
+            } catch {
+                forgetTeamKey();
+            }
+        }
+
+        function forgetTeamKey() {
+            localStorage.removeItem(TEAM_KEY);
+            sessionStorage.removeItem(TEAM_KEY);
+            teamKey = null;
+            teamSalt = null;
+        }
+
+        // 把拿到的原始 data.json 转成可显示的列表
+        async function applyRemote(raw) {
+            rawRemote = raw;
+            if (Array.isArray(raw)) {
+                resources = raw;
+                dataState = 'plain';
+            } else if (isEncrypted(raw)) {
+                if (teamKey && teamSalt === raw.salt) {
+                    try {
+                        resources = await decryptList(raw, teamKey);
+                        dataState = 'unlocked';
+                        return;
+                    } catch {
+                        forgetTeamKey();
+                    }
+                } else if (teamKey) {
+                    // salt 变了 = 团队密码被更换过
+                    forgetTeamKey();
+                    showNotification('🔐 团队密码已更换，请输入新密码', 'info');
+                }
+                resources = [];
+                dataState = 'locked';
+            } else {
+                throw new Error('data.json 格式无法识别');
+            }
+        }
+
+        async function handleUnlock(event) {
+            event.preventDefault();
+            const input = document.getElementById('unlockPassword');
+            const btn = document.getElementById('unlockBtn');
+            if (!isEncrypted(rawRemote)) return;
+
+            btn.disabled = true;
+            btn.textContent = '解锁中...';
+            try {
+                const key = await deriveKey(input.value, rawRemote.salt, rawRemote.iterations);
+                resources = await decryptList(rawRemote, key);
+                teamKey = key;
+                teamSalt = rawRemote.salt;
+                dataState = 'unlocked';
+                await storeTeamKey(key, teamSalt, document.getElementById('unlockRemember').checked);
+                input.value = '';
+                updateStats();
+                displayResources();
+                showNotification('✅ 已解锁', 'success');
+            } catch {
+                showNotification('❌ 团队密码不正确', 'error');
+                input.select();
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '解锁';
+            }
+        }
+
+        function lockNow() {
+            if (!confirm('锁定后，本浏览器需要重新输入团队密码才能查看。确定吗？')) return;
+            forgetTeamKey();
+            if (isEncrypted(rawRemote)) {
+                resources = [];
+                dataState = 'locked';
+            }
+            updateAuthUI();
+            updateStats();
+            displayResources();
+        }
+
+        // ================= 团队密码设置 / 更换 =================
+        function openKeyModal() {
+            if (!isAdmin) {
+                showNotification('❌ 请先登录管理员账号', 'error');
+                return;
+            }
+            if (dataState === 'locked') {
+                showNotification('❌ 请先输入当前团队密码解锁，再更换', 'error');
+                return;
+            }
+            document.getElementById('keyForm').reset();
+            document.getElementById('keyTitle').textContent =
+                dataState === 'unlocked' ? '🔐 更换团队密码' : '🔐 设置团队密码';
+            document.getElementById('keyModal').classList.add('active');
+            document.getElementById('newTeamPassword').focus();
+        }
+
+        function closeKeyModal() {
+            document.getElementById('keyModal').classList.remove('active');
+            document.getElementById('keyForm').reset();
+        }
+
+        // 约 99 位随机强度的密码，形如 k3f9-7xm2-pq8r-...
+        function suggestPassword() {
+            const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+            const bytes = crypto.getRandomValues(new Uint8Array(20));
+            const pw = Array.from(bytes, b => chars[b % chars.length]).join('').match(/.{4}/g).join('-');
+            document.getElementById('newTeamPassword').value = pw;
+            document.getElementById('confirmTeamPassword').value = pw;
+        }
+
+        async function handleChangeKey(event) {
+            event.preventDefault();
+            const pw = document.getElementById('newTeamPassword').value;
+            const confirmPw = document.getElementById('confirmTeamPassword').value;
+            if (pw.length < MIN_PASSWORD_LENGTH) {
+                showNotification(`❌ 密码至少 ${MIN_PASSWORD_LENGTH} 位`, 'error');
+                return;
+            }
+            if (pw !== confirmPw) {
+                showNotification('❌ 两次输入的密码不一致', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('keySubmitBtn');
+            btn.disabled = true;
+            btn.textContent = '加密中...';
+            try {
+                const salt = newSalt();
+                const key = await deriveKey(pw, salt);
+                const wasPlain = dataState === 'plain';
+                await commitChange(list => list,
+                    wasPlain ? 'Encrypt bookmarks' : 'Change team password',
+                    { key, salt });
+                await storeTeamKey(key, salt, true);
+                closeKeyModal();
+                showNotification(wasPlain
+                    ? '✅ 数据已加密。请把团队密码私下发给同事'
+                    : '✅ 团队密码已更换。请把新密码私下发给同事', 'success');
+            } catch (e) {
+                showNotification('❌ 失败：' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '保存并加密';
+            }
+        }
+
+        // ================= 分类 =================
+        function categoryName(key) {
+            return BUILTIN_CATEGORIES[key]?.name || String(key || '');
+        }
+
+        function categoryIcon(key) {
+            return BUILTIN_CATEGORIES[key]?.icon || '🏷️';
+        }
+
+        function hashString(s) {
+            let h = 0;
+            for (const ch of String(s)) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+            return h;
+        }
+
+        function categoryBadge(key) {
+            const label = `${categoryIcon(key)} ${escapeHtml(categoryName(key))}`;
+            if (BUILTIN_CATEGORIES[key]) return `<span class="badge ${key}">${label}</span>`;
+            const [bg, fg] = CUSTOM_PALETTE[hashString(key) % CUSTOM_PALETTE.length];
+            return `<span class="badge" style="background:${bg};color:${fg}">${label}</span>`;
+        }
+
+        // 数据里出现过的所有分类：内置的在前，其余按名称排序
+        function getCategories() {
+            const used = new Set(resources.map(r => r.category).filter(Boolean));
+            const builtin = Object.keys(BUILTIN_CATEGORIES).filter(k => used.has(k));
+            const custom = [...used].filter(k => !BUILTIN_CATEGORIES[k])
+                .sort((a, b) => a.localeCompare(b, 'zh-CN'));
+            return [...builtin, ...custom];
+        }
+
+        // 把用户输入的分类名转成存储用的 key（"工具"→tool，大小写不同的已有分类合并）
+        function resolveCategory(input) {
+            const value = String(input || '').trim().slice(0, 30);
+            if (!value) return '';
+            const lower = value.toLowerCase();
+            for (const [key, meta] of Object.entries(BUILTIN_CATEGORIES)) {
+                if (key === lower || meta.name.toLowerCase() === lower) return key;
+            }
+            return getCategories().find(k => k.toLowerCase() === lower) || value;
+        }
+
+        function renderCategories() {
+            const cats = getCategories();
+            const count = k => resources.filter(r => r.category === k).length;
+
+            document.getElementById('categoryNav').innerHTML = cats.map(k => `
+                <button class="nav-item" data-category="${escapeHtml(k)}" title="${escapeHtml(categoryName(k))}">
+                    <span class="nav-icon">${categoryIcon(k)}</span>
+                    <span class="nav-label">${escapeHtml(categoryName(k))}</span>
+                    <span class="nav-count">${count(k)}</span>
+                </button>`).join('');
+
+            document.getElementById('categorySelect').innerHTML =
+                `<option value="all">全部分类</option><option value="fav">⭐ 我的收藏</option>` +
+                cats.map(k => `<option value="${escapeHtml(k)}">${categoryIcon(k)} ${escapeHtml(categoryName(k))}</option>`).join('');
+
+            document.getElementById('categoryList').innerHTML =
+                cats.map(k => `<option value="${escapeHtml(categoryName(k))}"></option>`).join('');
+
+            // 当前分类被删空了，就回到全部
+            if (!['all', 'fav'].includes(currentFilter) && !cats.includes(currentFilter)) {
+                currentFilter = 'all';
+            }
+            syncFilterUI();
+        }
+
+        // ================= 收藏（个人，本浏览器） =================
+        function loadFavorites() {
+            try {
+                return new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]'));
+            } catch {
+                return new Set();
+            }
+        }
+
+        function toggleFavorite(id) {
+            if (favorites.has(id)) favorites.delete(id);
+            else favorites.add(id);
+            localStorage.setItem(FAV_KEY, JSON.stringify([...favorites]));
+            updateStats();
+            displayResources();
+        }
+
+        // ================= GitHub API =================
+        function ghHeaders() {
+            return {
+                'Accept': 'application/vnd.github+json',
+                'Authorization': `Bearer ${ghToken}`,
+                'X-GitHub-Api-Version': '2022-11-28'
+            };
+        }
+
+        // 带 token 的请求；401 说明 token 过期/被撤销，自动退出并提示重新登录
+        async function ghFetch(url, options = {}) {
+            const res = await fetch(url, {
+                cache: 'no-store',
+                ...options,
+                headers: { ...ghHeaders(), ...(options.headers || {}) }
+            });
+            if (res.status === 401) {
+                expireSession('expired');
+                throw new Error('Token 已过期或被撤销，请重新登录');
+            }
+            return res;
+        }
+
+        // 管理员：读仓库里的实时内容（附带 sha，写入时要用）
+        async function fetchFromApi() {
+            const res = await ghFetch(`${API_URL}?ref=${GH_BRANCH}&t=${Date.now()}`);
+            if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+            const json = await res.json();
+            return { raw: JSON.parse(base64ToUtf8(json.content)), sha: json.sha };
+        }
+
+        // 访客：读 Pages 上的 data.json，加时间戳绕过浏览器/CDN 缓存
+        async function fetchFromPages() {
+            const res = await fetch(`${DATA_PATH}?t=${Date.now()}`, { cache: 'no-store' });
+            if (!res.ok) throw new Error(`data.json ${res.status}`);
+            return await res.json();
+        }
+
+        async function loadResources({ silent = false } = {}) {
+            let raw = null;
+            try {
+                if (isAdmin) {
+                    try {
+                        raw = (await fetchFromApi()).raw;
+                    } catch (e) {
+                        console.warn('API 读取失败，改读 Pages:', e.message);
+                        raw = await fetchFromPages();
+                    }
+                } else {
+                    raw = await fetchFromPages();
+                }
+                await applyRemote(raw);
+                localStorage.setItem(CACHE_KEY, JSON.stringify(raw));
+            } catch (error) {
+                console.warn('⚠️ 加载最新数据失败:', error.message);
+                try {
+                    const cached = localStorage.getItem(CACHE_KEY);
+                    if (!cached) throw new Error('no cache');
+                    raw = JSON.parse(cached);
+                    await applyRemote(raw);
+                    if (!silent) showNotification('⚠️ 无法获取最新数据，显示的是本地缓存', 'info');
+                } catch {
+                    resources = [];
+                    dataState = 'empty';
+                    if (!silent) showNotification('❌ 无法加载数据，请检查网络', 'error');
+                }
+            }
+
+            // 数据有变化时才去拉"最后更新"（GitHub 未登录接口每小时限 60 次，不能每分钟都查）
+            const signature = JSON.stringify(raw);
+            if (signature !== lastDataSignature) {
+                lastDataSignature = signature;
+                loadLastUpdated();
+            }
+
+            updateAuthUI();
+            updateStats();
+        }
+
+        // 读取 data.json 最近一次提交：时间、提交人、改了什么
+        async function loadLastUpdated() {
+            const el = document.getElementById('lastUpdated');
+            try {
+                const url = `${API_BASE}/commits?path=${DATA_PATH}&sha=${GH_BRANCH}&per_page=1`;
+                const res = isAdmin
+                    ? await ghFetch(url)
+                    : await fetch(url, { headers: { 'Accept': 'application/vnd.github+json' }, cache: 'no-store' });
+                if (!res.ok) return;
+                const [commit] = await res.json();
+                if (!commit) return;
+
+                const date = new Date(commit.commit.committer?.date || commit.commit.author?.date);
+                const who = commit.author?.login || commit.commit.author?.name || '';
+                const message = (commit.commit.message || '').split('\n')[0];
+                el.innerHTML = `<a href="${HISTORY_URL}" target="_blank" rel="noopener noreferrer">🕒 最后更新：${escapeHtml(formatDate(date))}${who ? ' · ' + escapeHtml(who) : ''} · ${escapeHtml(message)}</a>`;
+                el.title = `${formatDate(date)} ${who}\n${message}\n点击查看全部修改历史`;
+            } catch (e) {
+                console.warn('获取最后更新时间失败:', e.message);
+            }
+        }
+
+        // ================= 写入数据（加密后直接提交到 GitHub） =================
+        // mutate: (latestList) => newList。每次基于仓库里的最新内容修改，多人同时编辑也不会互相覆盖。
+        // 提交信息里不写标题，因为提交记录是公开的。
+        // rekey: { key, salt } 用新密钥加密（设置/更换团队密码时使用）
+        async function commitChange(mutate, message, rekey = null) {
+            if (saving) throw new Error('上一次保存还在进行中');
+            const encKey = rekey ? rekey.key : teamKey;
+            const encSalt = rekey ? rekey.salt : teamSalt;
+            if (!encKey) {
+                throw new Error(dataState === 'plain'
+                    ? '数据尚未加密，请先设置团队密码'
+                    : '请先输入团队密码解锁');
+            }
+
+            saving = true;
+            try {
+                for (let attempt = 1; attempt <= 3; attempt++) {
+                    const { raw, sha } = await fetchFromApi();
+
+                    let latest;
+                    if (Array.isArray(raw)) {
+                        latest = raw;
+                    } else if (isEncrypted(raw)) {
+                        if (!teamKey || raw.salt !== teamSalt) {
+                            throw new Error('团队密码已被其他管理员更换，请刷新页面后输入新密码');
+                        }
+                        latest = await decryptList(raw, teamKey);
+                    } else {
+                        throw new Error('data.json 格式无法识别');
+                    }
+
+                    const updated = mutate(latest.slice());
+                    const envelope = await encryptList(updated, encKey, encSalt);
+                    const res = await ghFetch(API_URL, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message,
+                            content: utf8ToBase64(JSON.stringify(envelope, null, 2) + '\n'),
+                            sha,
+                            branch: GH_BRANCH
+                        })
+                    });
+                    if (res.ok) {
+                        teamKey = encKey;
+                        teamSalt = encSalt;
+                        rawRemote = envelope;
+                        resources = updated;
+                        dataState = 'unlocked';
+                        lastDataSignature = JSON.stringify(envelope);
+                        localStorage.setItem(CACHE_KEY, lastDataSignature);
+                        updateAuthUI();
+                        updateStats();
+                        loadLastUpdated();
+                        return;
+                    }
+                    // 409/422 = 有人在你之前提交了，重新拉取再改
+                    if ((res.status === 409 || res.status === 422) && attempt < 3) continue;
+                    if (res.status === 403 || res.status === 404) {
+                        throw new Error('这个 Token 没有仓库写权限（需要 Contents: Read and write）');
+                    }
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body.message || `GitHub API ${res.status}`);
+                }
+            } finally {
+                saving = false;
+            }
+        }
+
+        // 写操作前的检查：未加密 → 引导设置密码；已锁定 → 提示解锁
+        function ensureWritable() {
+            if (!isAdmin) {
+                showNotification('❌ 请先登录管理员账号', 'error');
+                return false;
+            }
+            if (dataState === 'plain') {
+                showNotification('🔐 请先设置团队密码，数据加密后才能编辑', 'info');
+                openKeyModal();
+                return false;
+            }
+            if (dataState !== 'unlocked') {
+                showNotification('❌ 请先输入团队密码解锁', 'error');
+                return false;
+            }
+            return true;
+        }
+
+        // 导出备份（明文，只保存在本机）
+        function syncToJSON() {
+            if (dataState === 'locked') {
+                showNotification('❌ 请先输入团队密码解锁', 'error');
+                return;
+            }
+            try {
+                const blob = new Blob([JSON.stringify(resources, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'bookmarks-backup.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showNotification(`✅ 已导出 ${resources.length} 条。备份文件是明文，请只保存在本地，不要上传到公开位置`, 'success');
+            } catch (error) {
+                showNotification('❌ 导出失败：' + error.message, 'error');
+            }
+        }
+
+        // ================= 渲染 =================
+        function updateStats() {
+            const ids = new Set(resources.map(r => r.id));
+            document.getElementById('count-all').textContent = resources.length;
+            document.getElementById('count-fav').textContent = [...favorites].filter(id => ids.has(id)).length;
+            renderCategories();
+            displayResources();
+        }
+
+        function getFiltered() {
+            const searchTerm = document.getElementById('searchInput').value.trim().toLowerCase();
+            let list = resources;
+
+            if (currentFilter === 'fav') {
+                list = list.filter(r => favorites.has(r.id));
+            } else if (currentFilter !== 'all') {
+                list = list.filter(r => r.category === currentFilter);
+            }
+
+            if (searchTerm) {
+                list = list.filter(r =>
+                    (r.title || '').toLowerCase().includes(searchTerm) ||
+                    (r.description || '').toLowerCase().includes(searchTerm) ||
+                    (r.url || '').toLowerCase().includes(searchTerm) ||
+                    categoryName(r.category).toLowerCase().includes(searchTerm)
+                );
+            }
+
+            if (sortKey) {
+                const val = r => sortKey === 'category' ? categoryName(r.category) : (r[sortKey] || '');
+                list = list.slice().sort((a, b) => {
+                    const cmp = String(val(a)).localeCompare(String(val(b)), 'zh-CN');
+                    return sortAsc ? cmp : -cmp;
+                });
+            }
+
+            // 收藏的始终置顶（保持各自原有顺序）
+            list = [...list.filter(r => favorites.has(r.id)), ...list.filter(r => !favorites.has(r.id))];
+            return { list, searchTerm };
+        }
+
+        function displayResources() {
+            const locked = dataState === 'locked';
+            document.getElementById('lockPanel').hidden = !locked;
+            document.getElementById('contentArea').hidden = locked;
+            document.getElementById('plainBanner').hidden = dataState !== 'plain';
+
+            if (locked) {
+                document.getElementById('resultCount').textContent = '🔒 已加密';
+                return;
+            }
+
+            const tbody = document.getElementById('resultsBody');
+            const { list, searchTerm } = getFiltered();
+            const scopeTotal = currentFilter === 'all' ? resources.length
+                : currentFilter === 'fav' ? resources.filter(r => favorites.has(r.id)).length
+                : resources.filter(r => r.category === currentFilter).length;
+
+            document.getElementById('resultCount').textContent =
+                dataState === 'loading' ? '加载中...' : `${list.length} / ${scopeTotal} 条`;
+
+            if (list.length === 0) {
+                const msg = dataState === 'loading' ? '正在加载资源数据...'
+                    : currentFilter === 'fav' && !searchTerm
+                        ? '还没有收藏。点击每行最前面的 ☆ 即可收藏，收藏的资源会置顶显示'
+                        : '未找到匹配的资源，请尝试其他搜索条件';
+                tbody.innerHTML = `<tr class="empty-row"><td colspan="6">${msg}</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = list.map(r => {
+                const href = escapeHtml(safeUrl(r.url));
+                const id = Number(r.id);
+                const fav = favorites.has(r.id);
+                return `
+                <tr class="${fav ? 'pinned' : ''}">
+                    <td class="col-star">
+                        <button class="star-btn ${fav ? 'on' : ''}" onclick="toggleFavorite(${id})"
+                                aria-label="${fav ? '取消收藏' : '收藏'}" title="${fav ? '取消收藏' : '收藏并置顶'}">${fav ? '★' : '☆'}</button>
+                    </td>
+                    <td class="col-title"><a href="${href}" target="_blank" rel="noopener noreferrer">${highlightText(r.title, searchTerm)}</a></td>
+                    <td>${categoryBadge(r.category)}</td>
+                    <td class="col-url"><a href="${href}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(r.url)}">${highlightText(r.url, searchTerm)}</a></td>
+                    <td class="col-desc">${highlightText(r.description, searchTerm) || '—'}</td>
+                    <td class="col-actions admin-only">
+                        <button class="link-btn" onclick="editResource(${id})">编辑</button>
+                        <button class="link-btn danger" onclick="deleteResource(${id})">删除</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        // 先转义再高亮，避免搜索词或数据里的 HTML 被执行
+        function highlightText(text, searchTerm) {
+            const safe = escapeHtml(text);
+            if (!searchTerm) return safe;
+            const pattern = escapeHtml(searchTerm).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return safe.replace(new RegExp(`(${pattern})`, 'gi'), '<mark>$1</mark>');
+        }
+
+        function searchResources() {
+            displayResources();
+        }
+
+        function filterByCategory(category) {
+            currentFilter = category;
+            syncFilterUI();
+            displayResources();
+        }
+
+        function syncFilterUI() {
+            document.querySelectorAll('.nav-item[data-category]').forEach(item => {
+                item.classList.toggle('active', item.dataset.category === currentFilter);
+            });
+            document.getElementById('categorySelect').value = currentFilter;
+            document.getElementById('pageTitle').textContent =
+                currentFilter === 'all' ? '全部资源'
+                : currentFilter === 'fav' ? '我的收藏'
+                : categoryName(currentFilter);
+        }
+
+        function resetFilters() {
+            document.getElementById('searchInput').value = '';
+            sortKey = null;
+            updateSortArrows();
+            filterByCategory('all');
+        }
+
+        // 点击表头排序：升序 → 降序 → 取消
+        function toggleSort(key) {
+            if (sortKey !== key) {
+                sortKey = key;
+                sortAsc = true;
+            } else if (sortAsc) {
+                sortAsc = false;
+            } else {
+                sortKey = null;
+            }
+            updateSortArrows();
+            displayResources();
+        }
+
+        function updateSortArrows() {
+            ['title', 'category'].forEach(k => {
+                document.getElementById(`sort-${k}`).textContent =
+                    sortKey === k ? (sortAsc ? '▲' : '▼') : '';
+            });
+        }
+
+        function toggleSidebar() {
+            const collapsed = document.getElementById('sidebar').classList.toggle('collapsed');
+            localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '');
+        }
+
+        // ================= 登录（GitHub Token） =================
+        // 返回 'ok' | 'invalid'（过期/错误）| 'noperm'（没写权限）| 'error'（网络问题）
+        async function verifyToken(token) {
+            try {
+                const res = await fetch(API_BASE, {
+                    headers: { 'Accept': 'application/vnd.github+json', 'Authorization': `Bearer ${token}` },
+                    cache: 'no-store'
+                });
+                if (res.status === 401) return 'invalid';
+                if (res.status === 403 || res.status === 404) return 'noperm';
+                if (!res.ok) return 'error';
+                const repo = await res.json();
+                return repo.permissions && (repo.permissions.push || repo.permissions.admin) ? 'ok' : 'noperm';
+            } catch {
+                return 'error';
+            }
+        }
+
+        function checkAuth() {
+            ghToken = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+            isAdmin = !!ghToken;
+            updateAuthUI();
+        }
+
+        // token 失效：清掉并弹出登录框，告诉用户怎么处理
+        function expireSession(reason) {
+            if (!isAdmin) return;
+            localStorage.removeItem(TOKEN_KEY);
+            sessionStorage.removeItem(TOKEN_KEY);
+            ghToken = null;
+            isAdmin = false;
+            updateAuthUI();
+            ['modal', 'importModal', 'keyModal'].forEach(id => document.getElementById(id).classList.remove('active'));
+            showLoginModal(reason === 'noperm'
+                ? '⚠️ 当前 Token 对仓库没有写权限。请在 GitHub 上编辑该 Token，把 Contents 权限改为 Read and write，然后重新登录。'
+                : '⚠️ 你的 GitHub Token 已过期或已被撤销，已自动退出。请打开下方「管理 / Regenerate 已有 Token」，点 Regenerate token 生成新的，再粘贴到这里重新登录。');
+        }
+
+        function updateAuthUI() {
+            const authArea = document.getElementById('authArea');
+            document.body.classList.toggle('is-admin', isAdmin);
+
+            const lockBtn = dataState === 'unlocked' && teamKey
+                ? `<button class="topbar-btn" onclick="lockNow()" title="清除本浏览器保存的团队密码">🔒 锁定</button>`
+                : '';
+
+            authArea.innerHTML = isAdmin
+                ? `<span class="auth-status admin">✅ 管理员模式</span>
+                   ${lockBtn}
+                   <button class="topbar-btn" onclick="handleLogout()">退出登录</button>`
+                : `<span class="auth-status">🔒 只读模式</span>
+                   ${lockBtn}
+                   <button class="topbar-btn" onclick="showLoginModal()">🔑 管理员登录</button>`;
+            displayResources();
+        }
+
+        function showLoginModal(notice = '') {
+            const noticeEl = document.getElementById('loginNotice');
+            noticeEl.textContent = typeof notice === 'string' ? notice : '';
+            noticeEl.hidden = !noticeEl.textContent;
+            document.getElementById('loginModal').classList.add('active');
+            document.getElementById('password').focus();
+        }
+
+        function closeLoginModal() {
+            document.getElementById('loginModal').classList.remove('active');
+            document.getElementById('loginForm').reset();
+            document.getElementById('loginNotice').hidden = true;
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+            const token = document.getElementById('password').value.trim();
+            const rememberMe = document.getElementById('rememberMe').checked;
+            const btn = document.getElementById('loginSubmitBtn');
+
+            btn.disabled = true;
+            btn.textContent = '验证中...';
+            try {
+                const result = await verifyToken(token);
+                if (result !== 'ok') {
+                    const msg = {
+                        invalid: '❌ Token 无效或已过期',
+                        noperm: '❌ 这个 Token 对 my-bookmarks 仓库没有写权限',
+                        error: '❌ 无法连接 GitHub，请检查网络后重试'
+                    }[result];
+                    showNotification(msg, 'error');
+                    if (result !== 'error') document.getElementById('password').value = '';
+                    return;
+                }
+                (rememberMe ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
+                ghToken = token;
+                isAdmin = true;
+                closeLoginModal();
+                updateAuthUI();
+                await loadResources({ silent: true });
+                showNotification('✅ 登录成功', 'success');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '登录';
+            }
+        }
+
+        function handleLogout() {
+            if (confirm('确定要退出登录吗？')) {
+                localStorage.removeItem(TOKEN_KEY);
+                sessionStorage.removeItem(TOKEN_KEY);
+                ghToken = null;
+                isAdmin = false;
+                updateAuthUI();
+                showNotification('✅ 已退出登录', 'success');
+            }
+        }
+
+        // ================= 增删改 =================
+        function openModal(id = null) {
+            if (!ensureWritable()) return;
+
+            const form = document.getElementById('resourceForm');
+            editingId = id;
+            form.reset();
+
+            if (id) {
+                const resource = resources.find(r => r.id === id);
+                if (resource) {
+                    document.getElementById('modalTitle').textContent = '编辑资源';
+                    document.getElementById('title').value = resource.title || '';
+                    document.getElementById('url').value = resource.url || '';
+                    document.getElementById('category').value = categoryName(resource.category);
+                    document.getElementById('description').value = resource.description || '';
+                }
+            } else {
+                document.getElementById('modalTitle').textContent = '添加新资源';
+                // 当前在某个分类下，就默认填上该分类
+                if (!['all', 'fav'].includes(currentFilter)) {
+                    document.getElementById('category').value = categoryName(currentFilter);
+                }
+            }
+
+            updateDupWarning();
+            document.getElementById('modal').classList.add('active');
+            document.getElementById('title').focus();
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+            document.getElementById('resourceForm').reset();
+            document.getElementById('dupWarning').hidden = true;
+            editingId = null;
+        }
+
+        // 输入 URL 时实时提示是否已存在
+        function updateDupWarning() {
+            const warning = document.getElementById('dupWarning');
+            const dup = findDuplicate(document.getElementById('url').value, editingId);
+            warning.hidden = !dup;
+            if (dup) warning.textContent = `⚠️ 这个链接已经存在：「${dup.title}」（${categoryName(dup.category)}）`;
+        }
+
+        async function saveResource(event) {
+            event.preventDefault();
+            if (!ensureWritable()) return;
+
+            const title = document.getElementById('title').value.trim();
+            const url = document.getElementById('url').value.trim();
+            const category = resolveCategory(document.getElementById('category').value);
+            const description = document.getElementById('description').value.trim();
+
+            if (!title || !url || !category) {
+                showNotification('❌ 请填写所有必填项', 'error');
+                return;
+            }
+
+            const id = editingId;
+            const dup = findDuplicate(url, id);
+            if (dup && !confirm(`这个链接已经存在：「${dup.title}」\n\n确定还要保存吗？`)) return;
+
+            const saveBtn = event.target.querySelector('.save-btn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = '保存中...';
+
+            try {
+                if (id) {
+                    await commitChange(list => {
+                        const i = list.findIndex(r => r.id === id);
+                        if (i === -1) throw new Error('该资源已被其他人删除');
+                        list[i] = { ...list[i], title, url, category, description };
+                        return list;
+                    }, 'Update bookmark');
+                    showNotification('✅ 已更新并保存到 GitHub', 'success');
+                } else {
+                    await commitChange(list => {
+                        list.unshift({ id: Date.now(), title, url, category, description });
+                        return list;
+                    }, 'Add bookmark');
+                    showNotification('✅ 已添加并保存到 GitHub', 'success');
+                }
+                closeModal();
+            } catch (e) {
+                showNotification('❌ 保存失败：' + e.message, 'error');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = '保存';
+            }
+        }
+
+        function editResource(id) {
+            openModal(id);
+        }
+
+        async function deleteResource(id) {
+            if (!ensureWritable()) return;
+            const resource = resources.find(r => r.id === id);
+            if (!resource || !confirm(`确定要删除 "${resource.title}" 吗？`)) return;
+
+            try {
+                await commitChange(list => list.filter(r => r.id !== id), 'Delete bookmark');
+                showNotification('✅ 已删除并保存到 GitHub', 'success');
+            } catch (e) {
+                showNotification('❌ 删除失败：' + e.message, 'error');
+            }
+        }
+
+        // ================= 批量导入 =================
+        function openImportModal() {
+            if (!ensureWritable()) return;
+            importItems = [];
+            document.getElementById('importFile').value = '';
+            document.getElementById('importBody').hidden = true;
+            document.getElementById('importSubmitBtn').disabled = true;
+            document.getElementById('importModal').classList.add('active');
+        }
+
+        function closeImportModal() {
+            document.getElementById('importModal').classList.remove('active');
+            importItems = [];
+        }
+
+        // 浏览器书签 HTML（Netscape 格式）：取每个链接及其所在文件夹名
+        function parseBookmarkHtml(text) {
+            const doc = new DOMParser().parseFromString(text, 'text/html');
+            const items = [];
+            doc.querySelectorAll('a[href]').forEach(a => {
+                const url = a.getAttribute('href').trim();
+                if (!/^https?:\/\//i.test(url)) return;
+                let folder = '';
+                const dl = a.closest('dl');
+                if (dl) {
+                    const prev = dl.previousElementSibling;
+                    const h3 = prev && prev.tagName === 'H3' ? prev : dl.parentElement?.querySelector(':scope > h3');
+                    folder = h3 ? h3.textContent.trim() : '';
+                }
+                items.push({ title: a.textContent.trim() || url, url, folder, description: '' });
+            });
+            return items;
+        }
+
+        // JSON 备份（明文数组，或用当前团队密码加密的 data.json）：保留原分类、描述和 ID
+        async function parseBookmarkJson(text) {
+            let data = JSON.parse(text);
+            if (isEncrypted(data)) {
+                if (!teamKey || data.salt !== teamSalt) {
+                    throw new Error('这是用其他团队密码加密的文件，无法解密');
+                }
+                data = await decryptList(data, teamKey);
+            }
+            if (!Array.isArray(data)) throw new Error('JSON 文件内容不是书签列表');
+            return data
+                .filter(r => r && /^https?:\/\//i.test(r.url || ''))
+                .map(r => ({
+                    id: Number.isFinite(r.id) ? r.id : null,
+                    title: String(r.title || r.url).trim(),
+                    url: String(r.url).trim(),
+                    folder: String(r.category || '').trim(),
+                    description: String(r.description || '').trim()
+                }));
+        }
+
+        async function handleImportFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const isJson = /\.json$/i.test(file.name);
+                const parsed = isJson ? await parseBookmarkJson(text) : parseBookmarkHtml(text);
+                if (parsed.length === 0) {
+                    showNotification('⚠️ 文件里没有找到可导入的链接', 'info');
+                    return;
+                }
+
+                // 标记重复：和现有数据重复，或文件内部重复
+                const seen = new Set();
+                importItems = parsed.map(item => {
+                    const key = normalizeUrl(item.url);
+                    const dup = !!findDuplicate(item.url) || seen.has(key);
+                    seen.add(key);
+                    return { ...item, title: item.title.slice(0, 200), dup, checked: !dup };
+                });
+
+                document.getElementById('importMode').options[0].text = isJson ? '使用文件里的分类' : '按书签文件夹名作为分类';
+                document.getElementById('importBody').hidden = false;
+                renderImportPreview();
+            } catch (e) {
+                showNotification('❌ 文件解析失败：' + e.message, 'error');
+            }
+        }
+
+        function importCategoryFor(item) {
+            const fallback = resolveCategory(document.getElementById('importCategory').value) || 'tool';
+            if (document.getElementById('importMode').value === 'fixed') return fallback;
+            return resolveCategory(item.folder) || fallback;
+        }
+
+        function renderImportPreview() {
+            const fixed = document.getElementById('importMode').value === 'fixed';
+            document.getElementById('importCategoryLabel').textContent = fixed ? '归入的分类' : '没有文件夹时使用的分类';
+
+            const dupCount = importItems.filter(i => i.dup).length;
+            const selected = importItems.filter(i => i.checked).length;
+            document.getElementById('importSummary').textContent =
+                `共 ${importItems.length} 条，已选 ${selected} 条` + (dupCount ? `，其中 ${dupCount} 条已存在（默认不导入）` : '');
+
+            document.getElementById('importPreviewBody').innerHTML = importItems.map((item, i) => `
+                <tr class="${item.dup ? 'dup' : ''}">
+                    <td><input type="checkbox" data-index="${i}" ${item.checked ? 'checked' : ''} aria-label="选择"></td>
+                    <td>${escapeHtml(item.title)}${item.dup ? '<span class="tag-dup">已存在</span>' : ''}</td>
+                    <td>${categoryBadge(importCategoryFor(item))}</td>
+                    <td class="col-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</td>
+                </tr>`).join('');
+
+            const selectAll = document.getElementById('importSelectAll');
+            selectAll.checked = selected > 0 && selected === importItems.length;
+            selectAll.indeterminate = selected > 0 && selected < importItems.length;
+            const btn = document.getElementById('importSubmitBtn');
+            btn.disabled = selected === 0;
+            btn.textContent = selected ? `导入 ${selected} 条` : '导入';
+        }
+
+        function toggleImportAll(checked) {
+            importItems.forEach(i => { i.checked = checked; });
+            renderImportPreview();
+        }
+
+        async function submitImport() {
+            if (!ensureWritable()) return;
+            const chosen = importItems.filter(i => i.checked).map(i => ({
+                id: i.id ?? null,
+                title: i.title,
+                url: i.url,
+                category: importCategoryFor(i),
+                description: i.description
+            }));
+            if (chosen.length === 0) return;
+
+            const btn = document.getElementById('importSubmitBtn');
+            btn.disabled = true;
+            btn.textContent = '导入中...';
+
+            try {
+                await commitChange(list => {
+                    // 备份里的 ID 不冲突就沿用（这样个人收藏不会丢），冲突才分配新 ID
+                    const usedIds = new Set(list.map(r => r.id));
+                    let nextId = Date.now();
+                    const fresh = chosen.map(item => {
+                        let id = item.id;
+                        if (id === null || usedIds.has(id)) {
+                            while (usedIds.has(nextId)) nextId++;
+                            id = nextId++;
+                        }
+                        usedIds.add(id);
+                        return { ...item, id };
+                    });
+                    return [...fresh, ...list];
+                }, `Import ${chosen.length} bookmarks`);
+                showNotification(`✅ 已导入 ${chosen.length} 条并保存到 GitHub`, 'success');
+                closeImportModal();
+            } catch (e) {
+                showNotification('❌ 导入失败：' + e.message, 'error');
+                renderImportPreview();
+            }
+        }
+
+        // ================= 刷新 =================
+        async function manualRefresh() {
+            await loadResources();
+            loadLastUpdated();
+            showNotification('🔄 已刷新为最新数据', 'info');
+        }
+
+        function isEditing() {
+            return document.querySelector('.modal.active') !== null || saving;
+        }
+
+        // 定时 + 切回标签页时自动拉最新数据（编辑中不刷新，避免打断）
+        setInterval(() => { if (!isEditing() && !document.hidden) loadResources({ silent: true }); }, AUTO_REFRESH_MS);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && !isEditing()) loadResources({ silent: true });
+        });
+
+        // ================= 通知 =================
+        let notifyTimer = null;
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type} show`;
+            clearTimeout(notifyTimer);
+            notifyTimer = setTimeout(() => notification.classList.remove('show'), 5000);
+        }
+
+        // ================= 事件绑定 =================
+        document.getElementById('sidebar').addEventListener('click', e => {
+            const item = e.target.closest('.nav-item[data-category]');
+            if (item) filterByCategory(item.dataset.category);
+        });
+
+        document.getElementById('importPreviewBody').addEventListener('change', e => {
+            const idx = e.target.dataset.index;
+            if (idx === undefined) return;
+            importItems[Number(idx)].checked = e.target.checked;
+            renderImportPreview();
+        });
+
+        document.getElementById('url').addEventListener('input', updateDupWarning);
+
+        [['modal', closeModal], ['loginModal', closeLoginModal], ['importModal', closeImportModal], ['keyModal', closeKeyModal]]
+            .forEach(([id, close]) => {
+                document.getElementById(id).addEventListener('click', function (e) {
+                    if (e.target === this) close();
+                });
+            });
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { closeModal(); closeLoginModal(); closeImportModal(); closeKeyModal(); }
+        });
+
+        // ================= 初始化 =================
+        async function init() {
+            if (localStorage.getItem(SIDEBAR_KEY)) {
+                document.getElementById('sidebar').classList.add('collapsed');
+            }
+            if (!window.crypto || !crypto.subtle) {
+                showNotification('❌ 当前浏览器不支持加密功能，请用最新版 Chrome / Edge 并通过 https 访问', 'error');
+            }
+            checkAuth();
+            document.getElementById('searchInput').addEventListener('input', searchResources);
+            await loadStoredTeamKey();
+
+            // 已保存的 token 先在后台检查一次，过期就立刻提示，而不是等到保存时才报错
+            if (isAdmin) {
+                const result = await verifyToken(ghToken);
+                if (result === 'invalid' || result === 'noperm') expireSession(result);
+            }
+            await loadResources({ silent: true });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
