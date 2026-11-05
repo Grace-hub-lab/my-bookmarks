@@ -545,6 +545,36 @@
             margin-left: 6px;
         }
 
+        /* ========== 分类管理 ========== */
+        .btn-sm { padding: 5px 10px; font-size: 12.5px; border-radius: 6px; }
+        .btn-primary.danger-bg { background: var(--danger); }
+        .btn-primary.danger-bg:hover { background: #b91c1c; }
+
+        .cat-manager { border: 1px solid var(--border); box-shadow: none; }
+        .cat-manager table { min-width: 0; }
+        .cat-manager td { padding: 10px 12px; }
+
+        .cat-manager input[type="text"] {
+            width: 100%;
+            padding: 7px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13.5px;
+            font-family: inherit;
+        }
+
+        .cat-manager input[type="text"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+        }
+
+        .cat-count { color: var(--muted); white-space: nowrap; }
+        .cat-actions { white-space: nowrap; text-align: right; }
+        .cat-actions button + button { margin-left: 6px; }
+        .cat-move { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+        .cat-move input { margin-top: 6px; }
+
         /* ========== 加密：解锁面板 / 提示条 ========== */
         .lock-panel {
             max-width: 440px;
@@ -659,6 +689,9 @@
             </button>
             <button class="nav-item" onclick="syncToJSON()" title="导出备份">
                 <span class="nav-icon">💾</span><span class="nav-label">导出备份</span>
+            </button>
+            <button class="nav-item admin-only" onclick="openCategoryModal()" title="分类改名 / 合并 / 删除">
+                <span class="nav-icon">⚙️</span><span class="nav-label">分类管理</span>
             </button>
             <button class="nav-item admin-only" onclick="openKeyModal()" title="设置 / 更换团队密码">
                 <span class="nav-icon">🔐</span><span class="nav-label">团队密码</span>
@@ -846,6 +879,33 @@
             <div class="modal-actions">
                 <button type="button" class="btn-default" onclick="closeImportModal()">取消</button>
                 <button type="button" class="btn-primary" id="importSubmitBtn" onclick="submitImport()" disabled>导入</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分类管理 -->
+    <div class="modal" id="categoryModal">
+        <div class="modal-content" role="dialog" aria-labelledby="categoryTitle" style="max-width: 600px;">
+            <h2 id="categoryTitle">⚙️ 分类管理</h2>
+            <div class="table-card cat-manager">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>分类</th>
+                            <th>资源数</th>
+                            <th style="text-align: right;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="categoryManagerBody"></tbody>
+                </table>
+            </div>
+            <p class="modal-hint">
+                • 改名时输入一个已有分类的名字，就会把两个分类合并<br>
+                • 删除分类时，里面的资源会移到你指定的分类，不会丢失<br>
+                • 新增分类：添加资源时在分类框里直接输入新名字即可
+            </p>
+            <div class="modal-actions">
+                <button type="button" class="btn-default" onclick="closeCategoryModal()">关闭</button>
             </div>
         </div>
     </div>
@@ -1264,6 +1324,175 @@
             syncFilterUI();
         }
 
+        // ================= 分类管理（改名 / 合并 / 删除） =================
+        // 'all' / 'fav' 是筛选用的特殊值，不能当分类名
+        const RESERVED_CATEGORIES = ['all', 'fav'];
+        let catList = [];
+        let catEdit = null;   // { key, mode: 'rename' | 'delete' }
+
+        function isReservedCategory(key) {
+            return RESERVED_CATEGORIES.includes(String(key || '').toLowerCase());
+        }
+
+        function countInCategory(key) {
+            return resources.filter(r => r.category === key).length;
+        }
+
+        function openCategoryModal() {
+            if (!ensureWritable()) return;
+            catEdit = null;
+            renderCategoryManager();
+            document.getElementById('categoryModal').classList.add('active');
+        }
+
+        function closeCategoryModal() {
+            document.getElementById('categoryModal').classList.remove('active');
+            catEdit = null;
+        }
+
+        function renderCategoryManager() {
+            catList = getCategories();
+            const body = document.getElementById('categoryManagerBody');
+
+            if (catList.length === 0) {
+                body.innerHTML = `<tr class="empty-row"><td colspan="3">还没有分类。添加资源时输入分类名即可新建</td></tr>`;
+                return;
+            }
+
+            body.innerHTML = catList.map((k, i) => {
+                const mode = catEdit && catEdit.key === k ? catEdit.mode : null;
+
+                if (mode === 'rename') {
+                    return `
+                    <tr>
+                        <td colspan="2">
+                            <input type="text" id="catRenameInput" maxlength="30" list="categoryList"
+                                   value="${escapeHtml(categoryName(k))}" aria-label="新的分类名" autocomplete="off">
+                        </td>
+                        <td class="cat-actions">
+                            <button class="btn-primary btn-sm" data-act="do-rename" data-i="${i}">保存</button>
+                            <button class="btn-default btn-sm" data-act="cancel">取消</button>
+                        </td>
+                    </tr>`;
+                }
+
+                if (mode === 'delete') {
+                    const other = catList.find(c => c !== k);
+                    return `
+                    <tr>
+                        <td colspan="2">
+                            ${categoryBadge(k)}
+                            <div class="cat-move">
+                                删除后，其中 ${countInCategory(k)} 条资源移到：
+                                <input type="text" id="catMoveTarget" maxlength="30" list="categoryList"
+                                       value="${other ? escapeHtml(categoryName(other)) : ''}"
+                                       placeholder="选择或输入分类名" aria-label="资源移到的分类" autocomplete="off">
+                            </div>
+                        </td>
+                        <td class="cat-actions">
+                            <button class="btn-primary btn-sm danger-bg" data-act="do-delete" data-i="${i}">确认删除</button>
+                            <button class="btn-default btn-sm" data-act="cancel">取消</button>
+                        </td>
+                    </tr>`;
+                }
+
+                return `
+                <tr>
+                    <td>${categoryBadge(k)}</td>
+                    <td class="cat-count">${countInCategory(k)} 条</td>
+                    <td class="cat-actions">
+                        <button class="link-btn" data-act="rename" data-i="${i}">改名</button>
+                        <button class="link-btn danger" data-act="delete" data-i="${i}">删除</button>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            const focusEl = document.getElementById('catRenameInput') || document.getElementById('catMoveTarget');
+            if (focusEl) {
+                focusEl.focus();
+                focusEl.select();
+            }
+        }
+
+        // 把 fromKey 分类下的所有资源改成 toKey（改名、合并、删除都走这里）
+        async function moveCategory(fromKey, toKey, message, btn, successMsg) {
+            const wasCurrent = currentFilter === fromKey;
+            const label = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '保存中...';
+            try {
+                await commitChange(
+                    list => list.map(r => r.category === fromKey ? { ...r, category: toKey } : r),
+                    message);
+                catEdit = null;
+                if (wasCurrent) filterByCategory(toKey);
+                renderCategoryManager();
+                showNotification(successMsg, 'success');
+            } catch (e) {
+                showNotification('❌ 保存失败：' + e.message, 'error');
+                btn.disabled = false;
+                btn.textContent = label;
+            }
+        }
+
+        async function renameCategory(oldKey, btn) {
+            const value = document.getElementById('catRenameInput').value.trim().slice(0, 30);
+            if (!value) {
+                showNotification('❌ 分类名不能为空', 'error');
+                return;
+            }
+            if (isReservedCategory(value)) {
+                showNotification('❌ 「all」「fav」是系统保留名，请换一个', 'error');
+                return;
+            }
+
+            let newKey = resolveCategory(value);
+            // 自定义分类只改大小写（如 jira → JIRA）也算改名
+            if (newKey === oldKey && !BUILTIN_CATEGORIES[oldKey] && value !== oldKey) newKey = value;
+            if (newKey === oldKey) {
+                catEdit = null;
+                renderCategoryManager();
+                return;
+            }
+
+            const n = countInCategory(oldKey);
+            const merging = catList.includes(newKey);
+            if (merging && !confirm(`分类「${categoryName(newKey)}」已经存在。\n\n确定把「${categoryName(oldKey)}」的 ${n} 条资源合并进去吗？`)) {
+                return;
+            }
+
+            await moveCategory(oldKey, newKey,
+                merging ? 'Merge category' : 'Rename category',
+                btn,
+                merging
+                    ? `✅ 已把「${categoryName(oldKey)}」合并到「${categoryName(newKey)}」`
+                    : `✅ 已改名为「${categoryName(newKey)}」`);
+        }
+
+        async function deleteCategory(key, btn) {
+            const toKey = resolveCategory(document.getElementById('catMoveTarget').value);
+            if (!toKey) {
+                showNotification('❌ 请填写资源要移到的分类', 'error');
+                return;
+            }
+            if (isReservedCategory(toKey)) {
+                showNotification('❌ 「all」「fav」是系统保留名，请换一个', 'error');
+                return;
+            }
+            if (toKey === key) {
+                showNotification('❌ 不能移到要删除的分类本身', 'error');
+                return;
+            }
+
+            const n = countInCategory(key);
+            if (!confirm(`确定删除分类「${categoryName(key)}」吗？\n\n其中 ${n} 条资源会移到「${categoryName(toKey)}」，不会被删除。`)) {
+                return;
+            }
+
+            await moveCategory(key, toKey, 'Delete category', btn,
+                `✅ 已删除分类「${categoryName(key)}」，${n} 条资源移到了「${categoryName(toKey)}」`);
+        }
+
         // ================= 收藏（个人，本浏览器） =================
         function loadFavorites() {
             try {
@@ -1677,7 +1906,7 @@
             ghToken = null;
             isAdmin = false;
             updateAuthUI();
-            ['modal', 'importModal', 'keyModal'].forEach(id => document.getElementById(id).classList.remove('active'));
+            ['modal', 'importModal', 'keyModal', 'categoryModal'].forEach(id => document.getElementById(id).classList.remove('active'));
             showLoginModal(reason === 'noperm'
                 ? '⚠️ 当前 Token 对仓库没有写权限。请在 GitHub 上编辑该 Token，把 Contents 权限改为 Read and write，然后重新登录。'
                 : '⚠️ 你的 GitHub Token 已过期或已被撤销，已自动退出。请打开下方「管理 / Regenerate 已有 Token」，点 Regenerate token 生成新的，再粘贴到这里重新登录。');
@@ -1815,6 +2044,10 @@
 
             if (!title || !url || !category) {
                 showNotification('❌ 请填写所有必填项', 'error');
+                return;
+            }
+            if (isReservedCategory(category)) {
+                showNotification('❌ 「all」「fav」是系统保留名，请换一个分类名', 'error');
                 return;
             }
 
@@ -2069,7 +2302,37 @@
 
         document.getElementById('url').addEventListener('input', updateDupWarning);
 
-        [['modal', closeModal], ['loginModal', closeLoginModal], ['importModal', closeImportModal], ['keyModal', closeKeyModal]]
+        // 分类管理表格里的按钮
+        document.getElementById('categoryManagerBody').addEventListener('click', e => {
+            const btn = e.target.closest('button[data-act]');
+            if (!btn) return;
+            const act = btn.dataset.act;
+            const key = catList[Number(btn.dataset.i)];
+            if (act === 'rename' || act === 'delete') {
+                catEdit = { key, mode: act };
+                renderCategoryManager();
+            } else if (act === 'cancel') {
+                catEdit = null;
+                renderCategoryManager();
+            } else if (act === 'do-rename') {
+                renameCategory(key, btn);
+            } else if (act === 'do-delete') {
+                deleteCategory(key, btn);
+            }
+        });
+
+        // 输入框里按回车 = 点保存 / 确认删除
+        document.getElementById('categoryManagerBody').addEventListener('keydown', e => {
+            if (e.key !== 'Enter') return;
+            const btn = e.target.closest('tr')?.querySelector('button[data-act^="do-"]');
+            if (btn && !btn.disabled) {
+                e.preventDefault();
+                btn.click();
+            }
+        });
+
+        [['modal', closeModal], ['loginModal', closeLoginModal], ['importModal', closeImportModal],
+         ['keyModal', closeKeyModal], ['categoryModal', closeCategoryModal]]
             .forEach(([id, close]) => {
                 document.getElementById(id).addEventListener('click', function (e) {
                     if (e.target === this) close();
@@ -2077,7 +2340,9 @@
             });
 
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') { closeModal(); closeLoginModal(); closeImportModal(); closeKeyModal(); }
+            if (e.key === 'Escape') {
+                closeModal(); closeLoginModal(); closeImportModal(); closeKeyModal(); closeCategoryModal();
+            }
         });
 
         // ================= 初始化 =================
