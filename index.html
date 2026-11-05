@@ -991,6 +991,7 @@
         let lastDataSignature = null;
         let importItems = [];
         let favorites = loadFavorites();
+        let categoryNames = {};        // 分类显示名覆盖，如 { tool: 'tool' }（随数据一起加密保存）
 
         // ================= 工具函数 =================
         function escapeHtml(str) {
@@ -1068,9 +1069,31 @@
                 ['encrypt', 'decrypt']);
         }
 
-        async function encryptList(list, key, saltB64) {
+        // 解密后的内容：旧格式是书签数组；有自定义分类名时是 { items, categoryNames }
+        function normalizePayload(data) {
+            if (Array.isArray(data)) return { items: data, names: {} };
+            if (data && Array.isArray(data.items)) {
+                const names = {};
+                for (const [k, v] of Object.entries(data.categoryNames || {})) {
+                    if (typeof v === 'string' && v.trim()) names[k] = v.trim().slice(0, 30);
+                }
+                return { items: data.items, names };
+            }
+            throw new Error('数据格式不正确');
+        }
+
+        // 没有自定义分类名时仍存成数组，和旧格式保持一致
+        function serializePayload(items, names) {
+            return Object.keys(names).length ? { items, categoryNames: names } : items;
+        }
+
+        function isPlainPayload(raw) {
+            return Array.isArray(raw) || (!!raw && !raw.encrypted && Array.isArray(raw.items));
+        }
+
+        async function encryptList(payload, key, saltB64) {
             const iv = crypto.getRandomValues(new Uint8Array(12));
-            const plain = new TextEncoder().encode(JSON.stringify(list));
+            const plain = new TextEncoder().encode(JSON.stringify(payload));
             const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain));
             return {
                 encrypted: true,
@@ -1086,9 +1109,7 @@
         async function decryptList(envelope, key) {
             const plain = await crypto.subtle.decrypt(
                 { name: 'AES-GCM', iv: base64ToBytes(envelope.iv) }, key, base64ToBytes(envelope.data));
-            const list = JSON.parse(new TextDecoder().decode(plain));
-            if (!Array.isArray(list)) throw new Error('解密后的数据格式不正确');
-            return list;
+            return normalizePayload(JSON.parse(new TextDecoder().decode(plain)));
         }
 
         function newSalt() {
@@ -1126,13 +1147,17 @@
         // 把拿到的原始 data.json 转成可显示的列表
         async function applyRemote(raw) {
             rawRemote = raw;
-            if (Array.isArray(raw)) {
-                resources = raw;
+            if (isPlainPayload(raw)) {
+                const p = normalizePayload(raw);
+                resources = p.items;
+                categoryNames = p.names;
                 dataState = 'plain';
             } else if (isEncrypted(raw)) {
                 if (teamKey && teamSalt === raw.salt) {
                     try {
-                        resources = await decryptList(raw, teamKey);
+                        const p = await decryptList(raw, teamKey);
+                        resources = p.items;
+                        categoryNames = p.names;
                         dataState = 'unlocked';
                         return;
                     } catch {
@@ -1144,6 +1169,7 @@
                     showNotification('🔐 团队密码已更换，请输入新密码', 'info');
                 }
                 resources = [];
+                categoryNames = {};
                 dataState = 'locked';
             } else {
                 throw new Error('data.json 格式无法识别');
@@ -1160,7 +1186,9 @@
             btn.textContent = '解锁中...';
             try {
                 const key = await deriveKey(input.value, rawRemote.salt, rawRemote.iterations);
-                resources = await decryptList(rawRemote, key);
+                const p = await decryptList(rawRemote, key);
+                resources = p.items;
+                categoryNames = p.names;
                 teamKey = key;
                 teamSalt = rawRemote.salt;
                 dataState = 'unlocked';
@@ -1259,7 +1287,7 @@
 
         // ================= 分类 =================
         function categoryName(key) {
-            return BUILTIN_CATEGORIES[key]?.name || String(key || '');
+            return categoryNames[key] || BUILTIN_CATEGORIES[key]?.name || String(key || '');
         }
 
         function categoryIcon(key) {
@@ -1288,15 +1316,19 @@
             return [...builtin, ...custom];
         }
 
-        // 把用户输入的分类名转成存储用的 key（"工具"→tool，大小写不同的已有分类合并）
+        // 把用户输入的分类名转成存储用的 key：
+        // 先按当前显示名匹配（含改过名的内置分类），再按内置分类的 key / 默认名，最后按已有 key（忽略大小写）
         function resolveCategory(input) {
             const value = String(input || '').trim().slice(0, 30);
             if (!value) return '';
             const lower = value.toLowerCase();
+            const cats = getCategories();
+            const byName = cats.find(k => categoryName(k).toLowerCase() === lower);
+            if (byName) return byName;
             for (const [key, meta] of Object.entries(BUILTIN_CATEGORIES)) {
                 if (key === lower || meta.name.toLowerCase() === lower) return key;
             }
-            return getCategories().find(k => k.toLowerCase() === lower) || value;
+            return cats.find(k => k.toLowerCase() === lower) || value;
         }
 
         function renderCategories() {
@@ -1421,9 +1453,10 @@
             btn.disabled = true;
             btn.textContent = '保存中...';
             try {
-                await commitChange(
-                    list => list.map(r => r.category === fromKey ? { ...r, category: toKey } : r),
-                    message);
+                await commitChange((list, names) => {
+                    delete names[fromKey];   // 分类没了，它的自定义显示名也一起清掉
+                    return list.map(r => r.category === fromKey ? { ...r, category: toKey } : r);
+                }, message);
                 catEdit = null;
                 if (wasCurrent) filterByCategory(toKey);
                 renderCategoryManager();
@@ -1446,12 +1479,26 @@
                 return;
             }
 
+            const isBuiltin = !!BUILTIN_CATEGORIES[oldKey];
             let newKey = resolveCategory(value);
-            // 自定义分类只改大小写（如 jira → JIRA）也算改名
-            if (newKey === oldKey && !BUILTIN_CATEGORIES[oldKey] && value !== oldKey) newKey = value;
+
             if (newKey === oldKey) {
-                catEdit = null;
-                renderCategoryManager();
+                if (value === categoryName(oldKey)) {
+                    // 名字没变
+                    catEdit = null;
+                    renderCategoryManager();
+                    return;
+                }
+                if (isBuiltin) {
+                    // 内置分类改显示名（如 工具 → tool，或改回 工具）
+                    await setCategoryName(oldKey, value, btn);
+                    return;
+                }
+                // 自定义分类只改大小写（如 jira → JIRA）
+                newKey = value;
+            } else if (isBuiltin && newKey === value && !catList.includes(newKey)) {
+                // 内置分类改成一个全新的名字：只改显示名，保留图标和颜色
+                await setCategoryName(oldKey, value, btn);
                 return;
             }
 
@@ -1467,6 +1514,28 @@
                 merging
                     ? `✅ 已把「${categoryName(oldKey)}」合并到「${categoryName(newKey)}」`
                     : `✅ 已改名为「${categoryName(newKey)}」`);
+        }
+
+        // 只改内置分类的显示名，资源的分类 key 不变；改回默认名时清掉覆盖
+        async function setCategoryName(key, value, btn) {
+            const label = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '保存中...';
+            try {
+                await commitChange((list, names) => {
+                    if (value === BUILTIN_CATEGORIES[key]?.name) delete names[key];
+                    else names[key] = value;
+                    return list;
+                }, 'Rename category');
+                catEdit = null;
+                syncFilterUI();
+                renderCategoryManager();
+                showNotification(`✅ 已改名为「${value}」`, 'success');
+            } catch (e) {
+                showNotification('❌ 保存失败：' + e.message, 'error');
+                btn.disabled = false;
+                btn.textContent = label;
+            }
         }
 
         async function deleteCategory(key, btn) {
@@ -1631,8 +1700,8 @@
                     const { raw, sha } = await fetchFromApi();
 
                     let latest;
-                    if (Array.isArray(raw)) {
-                        latest = raw;
+                    if (isPlainPayload(raw)) {
+                        latest = normalizePayload(raw);
                     } else if (isEncrypted(raw)) {
                         if (!teamKey || raw.salt !== teamSalt) {
                             throw new Error('团队密码已被其他管理员更换，请刷新页面后输入新密码');
@@ -1642,8 +1711,10 @@
                         throw new Error('data.json 格式无法识别');
                     }
 
-                    const updated = mutate(latest.slice());
-                    const envelope = await encryptList(updated, encKey, encSalt);
+                    // mutate 可以直接修改 names（分类显示名）
+                    const names = { ...latest.names };
+                    const updated = mutate(latest.items.slice(), names);
+                    const envelope = await encryptList(serializePayload(updated, names), encKey, encSalt);
                     const res = await ghFetch(API_URL, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
@@ -1659,6 +1730,7 @@
                         teamSalt = encSalt;
                         rawRemote = envelope;
                         resources = updated;
+                        categoryNames = names;
                         dataState = 'unlocked';
                         lastDataSignature = JSON.stringify(envelope);
                         localStorage.setItem(CACHE_KEY, lastDataSignature);
@@ -1705,7 +1777,7 @@
                 return;
             }
             try {
-                const blob = new Blob([JSON.stringify(resources, null, 2)], { type: 'application/json' });
+                const blob = new Blob([JSON.stringify(serializePayload(resources, categoryNames), null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -2137,21 +2209,26 @@
 
         // JSON 备份（明文数组，或用当前团队密码加密的 data.json）：保留原分类、描述和 ID
         async function parseBookmarkJson(text) {
-            let data = JSON.parse(text);
+            const data = JSON.parse(text);
+            let payload;
             if (isEncrypted(data)) {
                 if (!teamKey || data.salt !== teamSalt) {
                     throw new Error('这是用其他团队密码加密的文件，无法解密');
                 }
-                data = await decryptList(data, teamKey);
+                payload = await decryptList(data, teamKey);
+            } else if (isPlainPayload(data)) {
+                payload = normalizePayload(data);
+            } else {
+                throw new Error('JSON 文件内容不是书签列表');
             }
-            if (!Array.isArray(data)) throw new Error('JSON 文件内容不是书签列表');
-            return data
+            // 用文件里的显示名作为分类名，导入时再匹配到当前的分类
+            return payload.items
                 .filter(r => r && /^https?:\/\//i.test(r.url || ''))
                 .map(r => ({
                     id: Number.isFinite(r.id) ? r.id : null,
                     title: String(r.title || r.url).trim(),
                     url: String(r.url).trim(),
-                    folder: String(r.category || '').trim(),
+                    folder: String(payload.names[r.category] || r.category || '').trim(),
                     description: String(r.description || '').trim()
                 }));
         }
